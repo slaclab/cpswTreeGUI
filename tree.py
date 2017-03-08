@@ -33,6 +33,9 @@ class MyModel(QtCore.QAbstractItemModel):
   def addPoll(self, callback):
     self._poller.add(callback)
 
+  def setUpdate(self):
+    self._poller.setUpdate()
+
   def getPollGuard(self):
     return self._poller.getGuard()
 
@@ -167,6 +170,18 @@ class IfObj(QtCore.QObject):
   def getWidget(self):
     return self._widget
 
+class CallbackHelper(pycpsw.AsyncIO):
+  def __init__(self, real_callback):
+    pycpsw.AsyncIO.__init__(self)
+    self._real_callback = real_callback
+
+  def callback(self, arg):
+    try:
+      self._real_callback.callback(arg)
+    except:
+      print("Error in callback:")
+      print(sys.exc_info())
+
 class ScalVal(IfObj):
 
   _sig = QtCore.pyqtSignal(object)
@@ -176,6 +191,7 @@ class ScalVal(IfObj):
     self._node        = node
     readOnly = False
     print('creating ' + path.toString())
+    self._cbHelper = CallbackHelper( self )
     try:
       self._val    = pycpsw.ScalVal.create( path )
     except pycpsw.InterfaceNotImplementedError:
@@ -210,7 +226,7 @@ class ScalVal(IfObj):
         # if we lose focus w/o return being hit then we restore the original string
         QtCore.QObject.connect( widgt, QtCore.SIGNAL("editingFinished()"), self.restoreTxt  )
     self.setWidget(widgt)
-    self._cachedVal = self.readValue()
+    self._cachedVal = None;
     self.updateTxt( self._cachedVal )
     node._model.addPoll( self )
     self._sig.connect( self.updateTxt )
@@ -255,51 +271,43 @@ class ScalVal(IfObj):
     # don't update while someone is editing
     if self.getWidget().isModified():
       return
-    # assume they want signed numbers in decimal
-    if self._val.isSigned() or self._enum or self._string:
-      strVal = '{}'.format( newVal )
+    if newVal == None:
+      strVal = "???"
     else:
-      w = int((self._val.getSizeBits() + 3)/4) # leading 0x goes into width
-      strVal = '0x{:0{}x}'.format( newVal, w )
+      # assume they want signed numbers in decimal
+      if self._val.isSigned() or self._enum or self._string:
+        strVal = '{}'.format( newVal )
+      else:
+        w = int((self._val.getSizeBits() + 3)/4) # leading 0x goes into width
+        strVal = '0x{:0{}x}'.format( newVal, w )
     self.getWidget().setText( strVal )
 
   # read value, falling back to retrieving numerical enum entries
   # if the ScalVal cannot map back (ConversionError)
   def readValue(self):
-    if self._string:
-      self._val.getVal(self._string)
-      try:
-        return self._string[0:self._string.find(0)].decode('ascii')
-      except UnicodeDecodeError:
-        return "<unable to decode utf-8>"
-    else:
-      try:
-        v = self._val.getVal()
-        return v
-      except pycpsw.ConversionError:
-        if not self._enum:
-          raise
-        v = '{}'.format( self._val.getVal(forceNumeric=True) ) # force Numeric
-        return v 
-      except pycpsw.BadStatusError:
-        print( self._val.getPath() )
-        raise
-
-  # THIS IS EXECUTED BY THE POLLING THREAD
-  def __call__(self):
     # We probably should not call 'isVisible()' from this thread
 	# hopefully nothing really bad happens. Use because our demo
 	# has a really slow network connection...
-    if not self.getWidget().isVisible():
-      return False
-    value = self.readValue()
+    if self.getWidget().isVisible():
+      self._val.getValAsync( self._cbHelper )
+
+  def callback(self, value):
+#! Deal with conversion errors by forcing conversion
+#      except pycpsw.ConversionError:
+#        if not self._enum:
+#          raise
+#        v = '{}'.format( self._val.getVal(forceNumeric=True) ) # force Numeric
+#        return v 
     if self._cachedVal != value:
       # send value as a signal - this is properly sent from the 
       # polling thread to the main thread's event loop
       self._sig.emit(value)
       self._cachedVal = value
-      return True
-    return False
+      self._node._model.setUpdate()
+
+  # THIS IS EXECUTED BY THE POLLING THREAD
+  def __call__(self):
+    self.readValue()
 
 # Create a push-button for nodes with a cpsw Command interface
 class Cmd(IfObj):
@@ -357,17 +365,22 @@ class Poller(QtCore.QThread):
     self._mtx    = QtCore.QMutex()
     self._list   = []
     self.start()
+    self._update = True
+
+  def setUpdate(self):
+    with Guard(self._mtx):
+      self._update = True
 
   def run(self):
     while True:
       QtCore.QThread.msleep(self._pollMs)
-      update = False
       for el in self._list:
         with Guard(self._mtx):
-          if el():
-            update = True
-      if update:
-        self._signl.emit()
+          el()
+      with Guard(self._mtx):
+        if self._update:
+          self._signl.emit()
+        self._update = False
 
   def add(self, el):
     with Guard(self._mtx):
@@ -551,7 +564,7 @@ def main():
   if len(sys.argv) > 3:
     yamlIncDir = sys.argv[3]
   else:
-    yamlIncDir = ""
+    yamlIncDir = None
   h    = pycpsw.Path.loadYamlFile(yamlFile, yamlRoot, yamlIncDir).origin()
   print(h)
   root = MyNode(model, h)
