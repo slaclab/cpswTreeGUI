@@ -5,6 +5,9 @@ from PyQt4 import QtCore, QtGui
 import pycpsw
 import signal
 import array
+import numpy as np
+import matplotlib.pyplot as plt
+
 
 class MyModel(QtCore.QAbstractItemModel):
 
@@ -45,6 +48,23 @@ class MyModel(QtCore.QAbstractItemModel):
   def setTree(self, treeview):
     self._tree = treeview
     QtCore.QObject.connect( self._poller, QtCore.SIGNAL("_signl()"), self.update )
+
+  def flags(self,index):
+    flags = QtCore.Qt.ItemIsEnabled
+    if index.isValid():
+      flags = flags | QtCore.Qt.ItemIsSelectable
+      if 0 == index.column():
+        flags = flags | QtCore.Qt.ItemIsDragEnabled
+    return flags
+
+#  def mimeTypes(self):
+#    return ['text/plain']
+
+  def mimeData(self,indices):
+    mimedata = QtCore.QMimeData()
+    mimedata.setData('text/plain', indices[0].internalPointer().buildPath().toString())
+    return mimedata
+
 
   def update(self):
     # This is probably not the 'right' way to request everything to be updated
@@ -268,9 +288,6 @@ class ScalVal(IfObj):
   # THIS IS EXECUTED IN THE EVENT LOOP BY THE MAIN THREAD
   @QtCore.pyqtSlot(int)
   def updateTxt(self, newVal):
-    # don't update while someone is editing
-    if self.getWidget().isModified():
-      return
     if newVal == None:
       strVal = "???"
     else:
@@ -298,6 +315,8 @@ class ScalVal(IfObj):
 #          raise
 #        v = '{}'.format( self._val.getVal(forceNumeric=True) ) # force Numeric
 #        return v 
+    if self._string:
+      value = bytearray(value).decode('ascii')
     if self._cachedVal != value:
       # send value as a signal - this is properly sent from the 
       # polling thread to the main thread's event loop
@@ -447,48 +466,48 @@ class MyNode(object):
       for child in self._hub.getChildren():
         childHub = child.isHub()
         nelms    = child.getNelms()
+        leafmax  = 16 # max. to expand leaf children
+        nexpand  = nelms
         if nelms > 1:
-          if childHub:
-            # Hub arrays will be expanded
-            childName = child.getName() + "[0]"
+          childNames = list()
+          if childHub or nelms <= leafmax:
+            # Hub- and small leaf- arrays will be expanded
+            if not childHub and nexpand > leafmax:
+              nexpand = leafmax
+            for i in range(0,nexpand):
+              childNames.append( "{}[{}]".format(child.getName(),i) )
           else:
-            # leaf arrays receive name with full index range (so the user can see)
-            childName = '{}[0-{}]'.format( child.getName(), nelms - 1 )
+            # big leaf arrays receive name with full index range (so the user can see)
+            childNames = [ '{}[0-{}]'.format( child.getName(), nelms - 1 ) ]
         else:
           # non-array name is just the child's name (w/o indices)
-          childName = child.getName()
-        # create the model Node
-        childNode  = MyNode( self._model, child, childName, row, self )
-        # calculate the displayed size
-        childWidth = fm.width( childName )
-        if childWidth > maxWidth:
-          maxWidth = childWidth
-        self._children.append( childNode )
-        row += 1
-        if None == childHub:
-          widget_index = self._model.index(row - 1, 1, mindex)
-          # build a Path that leads here
-          path = childNode.buildPath()
-          # Check 
-          for IF in [ Cmd, ScalVal ]:
-            try:
-              widgt = IF(path, childNode, widget_index).getWidget()
-              break
-            except pycpsw.InterfaceNotImplementedError:
-              pass
-          else:
-            if nelms > 1:
-            	widgt = QtGui.QLabel("<Arrays or Interface not supported>")
+          childNames = [ child.getName() ]
+        for childName in childNames:
+          # create the model Node
+          childNode  = MyNode( self._model, child, childName, row, self )
+          # calculate the displayed size
+          childWidth = fm.width( childName )
+          if childWidth > maxWidth:
+            maxWidth = childWidth
+          self._children.append( childNode )
+          row += 1
+          if None == childHub:
+            widget_index = self._model.index(row - 1, 1, mindex)
+            # build a Path that leads here
+            path = childNode.buildPath()
+            # Check 
+            for IF in [ Cmd, ScalVal ]:
+              try:
+                widgt = IF(path, childNode, widget_index).getWidget()
+                break
+              except pycpsw.InterfaceNotImplementedError:
+                pass
             else:
-            	widgt = QtGui.QLabel("<No known Interface supported>")
-          tree.setIndexWidget( widget_index, widgt )
-        else:
-          # flatten out array of hubs
-          for i in range(1, child.getNelms()):
-            childName = '{}[{}]'.format(child.getName(), i)
-            childNode = MyNode( self._model, child, childName, row, self )
-            self._children.append( childNode )
-            row += 1
+              if nelms > 1:
+                widgt = QtGui.QLabel("<Arrays or Interface not supported>")
+              else:
+                widgt = QtGui.QLabel("<No known Interface supported>")
+            tree.setIndexWidget( widget_index, widgt )
       # calculate necessary space for indentation
       depth = 0
       p     = self
@@ -534,45 +553,74 @@ def test(selected, deselected):
   print("XXX")
   print(selected)
 
+@QtCore.pyqtSlot("QModelIndex")
+def test1(index):
+  print("ACTIVETED")
+  print("ROW {}, COL {}".format(index.row(), index.column()))
+  if index.column() == 0:
+    print(index.internalPointer().getNodeName())
+
 class Stream(QtCore.QThread):
   def __init__(self, path):
     QtCore.QThread.__init__(self)
     self._strm = pycpsw.Stream.create(path)
-    self._buf  = array.array('h',range(0,16384))
+    #self._buf  = array.array('h',range(0,16384))
+    self._buf = np.empty(16384,'int16')
+    self._buf.fill(0)
     self.start()
 
-  def run(self):
+  def read(self):
     got = self._strm.read(self._buf)
-    print('Got {} items', got)
+    print('Got {} items', got/2) # sample-size
     print(self._buf[0:20])
+    plt.plot(self._buf[0:got])
+    plt.show()
 
-def main():
+  def gb(self):
+    return self._buf
+
+  def run(self):
+    while True:
+      self.read()
+
+class RightPressFilter(QtCore.QObject):
+  def __init__(self):
+    QtCore.QObject.__init__(self)
+
+  def eventFilter(self, obj, event):
+    print("EVENTFILTER")
+    if event.type() in (QtCore.QEvent.MouseButtonPress):
+      if event.button() == QtCore.Qt.RightButton:
+        print("RIGHT BUTTON")
+        return True
+    return super(RighPressFilter, self).eventFilter(obj, event)
+
+def main1(args):
   signal.signal( signal.SIGINT, signal.SIG_DFL )
-  app = QtGui.QApplication(sys.argv)
+  app = QtGui.QApplication(args)
 
   model = MyModel()
 
-  if len(sys.argv) > 1:
-    yamlFile = sys.argv[1]
+  if len(args) > 1:
+    yamlFile = args[1]
   else:
-    print("usage: {} <yaml_file> [yaml_root_node_name='root' [yaml_inc_dir=''] ]".format(sys.argv[0])) 
+    print("usage: {} <yaml_file> [yaml_root_node_name='root' [yaml_inc_dir=''] ]".format(args[0]))
     sys.exit(1)
-  if len(sys.argv) > 2:
-    yamlRoot = sys.argv[2]
+  if len(args) > 2:
+    yamlRoot = args[2]
   else:
     yamlRoot = "root"
-  if len(sys.argv) > 3:
-    yamlIncDir = sys.argv[3]
+  if len(args) > 3:
+    yamlIncDir = args[3]
   else:
     yamlIncDir = None
   h    = pycpsw.Path.loadYamlFile(yamlFile, yamlRoot, yamlIncDir).origin()
   print(h)
   root = MyNode(model, h)
-
-  #try:
-  #strm = Stream(h.findByName("Stream0"))
-  #except:
-  #  print("Stream NOT created")
+  try:
+    strm = Stream(h.findByName("Stream0"))
+  except:
+    print("Stream NOT created")
 
   model.setRoot(root)
   v = QtGui.QTreeView()
@@ -586,10 +634,17 @@ def main():
   except pycpsw.NotFoundError:
     print("mmio/val not found -- not creating a counter")
   v.uniformRowHeights()
-  v.setMinimumSize(700, 250)
+  v.setMinimumSize(1000, 800)
 
   #QtCore.QObject.connect(v.selectionModel(), QtCore.SIGNAL('selectionChanged(QItemSelection, QItemSelection)'), test)
+  QtCore.QObject.connect(v, QtCore.SIGNAL('clicked(QModelIndex)'), test1)
+  v.installEventFilter( RightPressFilter() )
+  v.setDragEnabled(True)
   v.show()
+  return (v,app, pycpsw.Path.create(h))
+
+def main():
+  (v,app,root)=main1(sys.argv)
   sys.exit(app.exec_())
 
 if __name__ == '__main__':
