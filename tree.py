@@ -1,20 +1,42 @@
 #!/usr/bin/python3 -i
 
 import sys
-from PyQt4 import QtCore, QtGui
+import re
+from   PyQt4                              import QtCore, QtGui
 import pycpsw
 import signal
 import array
 import numpy as np
-import matplotlib.pyplot as plt
+from   matplotlib.figure                  import Figure
+from   matplotlib.backends.backend_qt4agg import FigureCanvasQTAgg    as FigureCanvas
+from   matplotlib.backends.backend_qt4agg import NavigationToolbar2QT as NavigationToolbar
 
 
 class MyModel(QtCore.QAbstractItemModel):
 
-  def __init__(self):
+  def __init__(self, rootPath):
+    self._app = QtCore.QCoreApplication.instance()
+    if not self._app:
+      self._app = QtGui.QApplication([])
+
     QtCore.QAbstractItemModel.__init__(self)
     self._poller    = Poller(1000)
     self._col0Width = 0
+    self._root      = MyNode(self, rootPath.origin())
+
+    self._tree      = QtGui.QTreeView()
+    QtCore.QObject.connect( self._poller, QtCore.SIGNAL("_signl()"), self.update )
+    self._tree.setModel( self )
+    self._tree.setRootIndex( QtCore.QAbstractItemModel.createIndex( self, 0, 0, self._root ) )
+    self._tree.setRootIsDecorated( True )
+    self._tree.uniformRowHeights()
+    self._tree.setMinimumSize(1000, 800)
+
+    #QtCore.QObject.connect( self._tree.selectionModel(), QtCore.SIGNAL('selectionChanged(QItemSelection, QItemSelection)'), test)
+    QtCore.QObject.connect( self._tree, QtCore.SIGNAL('clicked(QModelIndex)'), test1)
+    self._tree.installEventFilter( RightPressFilter() )
+    self._tree.setDragEnabled(True)
+    self._tree.show()
 
   def setCol0Width(self, width):
     self._col0Width = width
@@ -44,10 +66,6 @@ class MyModel(QtCore.QAbstractItemModel):
 
   def setRoot(self, root):
     self._root = root
-
-  def setTree(self, treeview):
-    self._tree = treeview
-    QtCore.QObject.connect( self._poller, QtCore.SIGNAL("_signl()"), self.update )
 
   def flags(self,index):
     flags = QtCore.Qt.ItemIsEnabled
@@ -81,7 +99,8 @@ class MyModel(QtCore.QAbstractItemModel):
 
   def rowCount(self, mindex):
     if mindex.isValid():
-      return mindex.internalPointer().childCount(mindex)
+      node = mindex.internalPointer()
+      return node.childCount(mindex)
     return self._root.childCount(QtCore.QModelIndex())
 
   def columnCount(self, mindex):
@@ -197,35 +216,69 @@ class CallbackHelper(pycpsw.AsyncIO):
 
   def callback(self, arg):
     try:
-      self._real_callback.callback(arg)
+      if None != arg:
+        self._real_callback.callback(arg)
+      else:
+        print("Error in callback -- Issuer:")
+        print(self._real_callback.callbackIssuer())
+  #      sys.exit(1)
     except:
-      print("Error in callback:")
-      print(sys.exc_info())
+      print("Exception in callback -- Issuer:{}".format( self._real_callback.callbackIssuer() ) )
+      print("Exception Info {}".format(sys.exc_info()[0]))
+      sys.exit(1)
 
 class ScalVal(IfObj):
 
   _sig = QtCore.pyqtSignal(object)
 
+  @staticmethod
+  def isStringHeuristic(sv):
+    if sv.getNelms() > 1 and not sv.getEnum() and 8 == sv.getSizeBits():
+      try:
+        bytearray(sv.getVal()).decode('ascii')
+      except:
+        return False
+      return True
+    return False
+
+  # use heuristics to detect an ascii string
+  @staticmethod
+  def maybeString(sv, path):
+    if not sv:
+      try:
+        sv = pycpsw.ScalVal_Base.create( path )
+      except pycpsw.InterfaceNotImplementedError:
+        return False
+    # if the encoding is NONE then getEncoding returns the 'None' object
+    # "NONE" is returned if there is an unknown code
+    if sv.getEncoding() == "NONE":
+        return False
+    return { "ASCII" : True, "CUSTOM_0" : False }.get(
+        sv.getEncoding(),
+        ScalVal.isStringHeuristic(sv)
+	)
+
   def __init__(self, path, node, widget_index ):
     IfObj.__init__(self)
-    self._node        = node
+
     readOnly = False
-    print('creating ' + path.toString())
-    self._cbHelper = CallbackHelper( self )
     try:
       self._val    = pycpsw.ScalVal.create( path )
     except pycpsw.InterfaceNotImplementedError:
       self._val    = pycpsw.ScalVal_RO.create( path )
       readOnly     = True
 
+    self._node        = node
+    print('creating ' + path.toString())
+    self._cbHelper = CallbackHelper( self )
+
     self._enum     = self._val.getEnum()
     nelms          = path.getNelms()
 
-    # use heuristics to detect an ascii string
-    if self._val.getEncoding() == 'ASCII' or (nelms > 1 and not self._enum and 8 == self._val.getSizeBits()):
+    if self.maybeString(self._val, None):
       self._string = bytearray(nelms) 
     else:
-      self._string = 0
+      self._string = None
 
     if nelms > 1 and not self._string:
       raise pycpsw.InterfaceNotImplementedError("Non-String arrays (ScalVal) not supported")
@@ -253,6 +306,9 @@ class ScalVal(IfObj):
     # Access is slow because it's synchronous. For speedup CPSW would have to
     # implement asynchronous I/O (but that would not really be its job; better
     # to use tools which already do that such as EPICS).
+
+  def callbackIssuer(self):
+    return self._val.getPath().toString()
 
   # write ScalVal from user text input
   @QtCore.pyqtSlot()
@@ -424,6 +480,12 @@ class MyNode(object):
     self._row      = row
     self._parent   = parent
     self._mtx      = QtCore.QMutex()
+    self._ifObj    = None
+
+  def setIfObj(self, ifObj):
+    if self._ifObj != None:
+      raise
+    self._ifObj = ifObj
 
   def __getChildren(self, mindex):
     return self._children
@@ -440,6 +502,12 @@ class MyNode(object):
   def getNodeName(self):
     return self._name
 
+  def getModel(self):
+    return self._model
+
+  def getChild(self):
+    return self._child
+
   def buildPath(self):
     l = list()
     n = self
@@ -452,28 +520,40 @@ class MyNode(object):
     path = n._child.findByName( pnam )
     return path
 
+  def addChild(self, child):
+    if None == self._children:
+      self._children = []
+    self._children.append(child)
+
   # build children list once, then
   # hack 'getChildren' to use __getChildren
   def getChildren(self, mindex):
-    self._children   = []
+    if None == self._children:
+      self._children   = []
     tree             = self._model.getTree()
     fm               = tree.fontMetrics()
     self.getChildren = self.__getChildren
     maxWidth         = 0
     if None != self._hub:
-      row = 0
+      row  = 0
       # for all children
+      path = self.buildPath() 
       for child in self._hub.getChildren():
         childHub = child.isHub()
         nelms    = child.getNelms()
         leafmax  = 16 # max. to expand leaf children
         nexpand  = nelms
         if nelms > 1:
+          # could be a string -- in this case we wouldn't want to expand
+          if not childHub and nelms <= leafmax:
+            try:
+              if ScalVal.maybeString( None, path.findByName( child.getName() ) ):
+                leafmax = 0
+            except pycpsw.InterfaceNotImplementedError:
+              pass
           childNames = list()
           if childHub or nelms <= leafmax:
             # Hub- and small leaf- arrays will be expanded
-            if not childHub and nexpand > leafmax:
-              nexpand = leafmax
             for i in range(0,nexpand):
               childNames.append( "{}[{}]".format(child.getName(),i) )
           else:
@@ -489,16 +569,18 @@ class MyNode(object):
           childWidth = fm.width( childName )
           if childWidth > maxWidth:
             maxWidth = childWidth
-          self._children.append( childNode )
+          self.addChild( childNode )
           row += 1
           if None == childHub:
             widget_index = self._model.index(row - 1, 1, mindex)
-            # build a Path that leads here
-            path = childNode.buildPath()
+            childPath    = path.findByName( childName )
             # Check 
-            for IF in [ Cmd, ScalVal ]:
+            IFs = [ ScalVal, Cmd, Stream ]
+            for IF in IFs:
               try:
-                widgt = IF(path, childNode, widget_index).getWidget()
+                ifObj = IF( childPath, childNode, widget_index )
+                widgt = ifObj.getWidget()
+                childNode.setIfObj( ifObj )
                 break
               except pycpsw.InterfaceNotImplementedError:
                 pass
@@ -559,22 +641,61 @@ def test1(index):
   print("ROW {}, COL {}".format(index.row(), index.column()))
   if index.column() == 0:
     print(index.internalPointer().getNodeName())
+    for c in index.internalPointer().getChildren(None):
+      print("has child ", c.getNodeName())
 
-class Stream(QtCore.QThread):
-  def __init__(self, path):
+class Stream(QtCore.QThread, IfObj):
+
+  _bufs    = []
+  _strms   = []
+
+  def __init__(self, path, node, widget_index):
     QtCore.QThread.__init__(self)
-    self._strm = pycpsw.Stream.create(path)
-    #self._buf  = array.array('h',range(0,16384))
-    self._buf = np.empty(16384,'int16')
+    IfObj.__init__(self)
+    if path.getNelms() > 1:
+      raise pycpsw.InterfaceNotImplementedError("Arrays of Streams not supported")
+    self._strm   = pycpsw.Stream.create(path)
+    #self._buf   = array.array('h',range(0,16384))
+    self._buf    = np.empty(16384,'int16')
     self._buf.fill(0)
+    self._fig    = Figure([2,2])
+    self._canvas = FigureCanvas( self._fig )
+    self._bufsz  = 0
+    toolbar      = NavigationToolbar( self._canvas, None )
+    box          = QtGui.QWidget()
+    layout       = QtGui.QVBoxLayout()
+    layout.addWidget(self._canvas )
+    layout.addWidget( toolbar )
+    box.setLayout( layout )
+    self._axes   = self._fig.add_subplot(111)
+    # create a child node so that we can collapse this widget...
+    model        = node.getModel()
+    widgetNode   = MyNode( model, node.getChild(), None, 0, node )
+    node.addChild( widgetNode )
+    plot_index = model.index(0, 1, widget_index)
+    model.getTree().setIndexWidget( plot_index, box )
+    # our regular widget is just empty
+    self.setWidget( QtGui.QLabel("") )
+    Stream._bufs.append( self._buf )
+    Stream._strms.append( self )
     self.start()
+    self._bufsz = 100
+    self.plot()
+    
+  def getCanvas(self):
+    return self._canvas
+
+  def plot(self):
+    self._axes.cla()
+    self._axes.plot( range(0,self._bufsz), self._buf[0:self._bufsz] )
+    self._canvas.draw()
 
   def read(self):
-    got = self._strm.read(self._buf)
-    print('Got {} items', got/2) # sample-size
+    # divide bytes by sample-size
+    self._bufsz = int( self._strm.read(self._buf) / 2 )
+    print('Got {} items'.format(self._bufsz))
     print(self._buf[0:20])
-    plt.plot(self._buf[0:got])
-    plt.show()
+    self.plot()
 
   def gb(self):
     return self._buf
@@ -599,8 +720,6 @@ def main1(args):
   signal.signal( signal.SIGINT, signal.SIG_DFL )
   app = QtGui.QApplication(args)
 
-  model = MyModel()
-
   if len(args) > 1:
     yamlFile = args[1]
   else:
@@ -614,34 +733,11 @@ def main1(args):
     yamlIncDir = args[3]
   else:
     yamlIncDir = None
-  h    = pycpsw.Path.loadYamlFile(yamlFile, yamlRoot, yamlIncDir).origin()
-  print(h)
-  root = MyNode(model, h)
-  try:
-    strm = Stream(h.findByName("Stream0"))
-  except:
-    print("Stream NOT created")
+  rp = pycpsw.Path.loadYamlFile(yamlFile, yamlRoot, yamlIncDir)
 
-  model.setRoot(root)
-  v = QtGui.QTreeView()
-  model.setTree(v)
-  v.setModel( model )
-  v.setRootIndex( QtCore.QAbstractItemModel.createIndex(model, 0, 0, root) )
-  v.setRootIsDecorated( True )
+  m  = MyModel( rp )
 
-  try:
-    counter = Counter( model, pycpsw.Path.create( h ).findByName("mmio/val"), 3000 )
-  except pycpsw.NotFoundError:
-    print("mmio/val not found -- not creating a counter")
-  v.uniformRowHeights()
-  v.setMinimumSize(1000, 800)
-
-  #QtCore.QObject.connect(v.selectionModel(), QtCore.SIGNAL('selectionChanged(QItemSelection, QItemSelection)'), test)
-  QtCore.QObject.connect(v, QtCore.SIGNAL('clicked(QModelIndex)'), test1)
-  v.installEventFilter( RightPressFilter() )
-  v.setDragEnabled(True)
-  v.show()
-  return (v,app, pycpsw.Path.create(h))
+  return (m, app, rp)
 
 def main():
   (v,app,root)=main1(sys.argv)
