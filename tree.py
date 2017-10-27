@@ -7,6 +7,8 @@ import pycpsw
 import signal
 import array
 import numpy as np
+import matplotlib
+matplotlib.use("Qt4Agg")
 from   matplotlib.figure                  import Figure
 from   matplotlib.backends.backend_qt4agg import FigureCanvasQTAgg    as FigureCanvas
 from   matplotlib.backends.backend_qt4agg import NavigationToolbar2QT as NavigationToolbar
@@ -209,6 +211,14 @@ class IfObj(QtCore.QObject):
   def getWidget(self):
     return self._widget
 
+class LineEditWrapper(QtGui.QLineEdit):
+  def __init__(self, parent=None):
+    QtGui.QLineEdit.__init__(self, parent)
+
+  def setText(self, txt):
+    QtGui.QLineEdit.setText(self, txt)
+    self.home( False )
+
 class CallbackHelper(pycpsw.AsyncIO):
   def __init__(self, real_callback):
     pycpsw.AsyncIO.__init__(self)
@@ -253,10 +263,11 @@ class ScalVal(IfObj):
     # "NONE" is returned if there is an unknown code
     if sv.getEncoding() == "NONE":
         return False
-    return { "ASCII" : True, "CUSTOM_0" : False }.get(
+    rval = { "ASCII" : True, "CUSTOM_0" : False }.get(
         sv.getEncoding(),
         ScalVal.isStringHeuristic(sv)
 	)
+    return rval;
 
   def __init__(self, path, node, widget_index ):
     IfObj.__init__(self)
@@ -286,7 +297,7 @@ class ScalVal(IfObj):
     if self._enum:
       widgt       = EnumButt( self._val, readOnly )
     else:
-      widgt       = QtGui.QLineEdit()
+      widgt       = LineEditWrapper()
       widgt.setReadOnly( readOnly )
       widgt.setFrame( not readOnly )
       if not readOnly:
@@ -693,8 +704,8 @@ class Stream(QtCore.QThread, IfObj):
   def read(self):
     # divide bytes by sample-size
     self._bufsz = int( self._strm.read(self._buf) / 2 )
-    print('Got {} items'.format(self._bufsz))
-    print(self._buf[0:20])
+    #print('Got {} items'.format(self._bufsz))
+    #print(self._buf[0:20])
     self.plot()
 
   def gb(self):
@@ -702,7 +713,11 @@ class Stream(QtCore.QThread, IfObj):
 
   def run(self):
     while True:
-      self.read()
+      with self._strm:
+        self.read()
+
+  def getName(self):
+    return self._strm.getName()
 
 class RightPressFilter(QtCore.QObject):
   def __init__(self):
