@@ -131,7 +131,7 @@ class Fixup(pycpsw.YamlFixup):
     if node.IsMap():
       fnd = node[name]
       if self.ok(fnd):
-        nl = l.copy()
+        nl = list(l)
         nl.append( name )
         res.append( (fnd, nl, node) )
       for it in node:

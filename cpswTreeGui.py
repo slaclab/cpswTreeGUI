@@ -1,8 +1,11 @@
 #!/usr/bin/python3
 
 import sys
+import socket
 import getopt
 import re
+import sip
+sip.setapi('QString', 2)
 from   PyQt4                              import QtCore, QtGui
 import pycpsw
 import yaml_cpp
@@ -746,7 +749,7 @@ def main1(oargs):
 
   for opt in opts:
     if   opt[0] == '-a':
-      ipAddr        = opt[1]
+      ipAddr        = socket.gethostbyname( opt[1] )
     elif opt[0] == '-T':
       useTcp        = True
     elif opt[0] == '-B':
