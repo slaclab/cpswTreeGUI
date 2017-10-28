@@ -2,13 +2,17 @@ import yaml_cpp
 import pycpsw
 
 class Fixup(pycpsw.YamlFixup):
-  def __init__(self, ipAddr=None, noStreams=False, srpV2=False, useTcp=False, disableDepack=False):
+  def __init__(self, ipAddr=None, noStreams=False, srpV2=False, useTcp=False, disableDepack=False, srpPort=0, strmPort=0):
     pycpsw.YamlFixup.__init__(self)
     self._noStreams     = noStreams
     self._srpV2         = srpV2
     self._useTcp        = useTcp
     self._ipAddr        = ipAddr
     self._disableDepack = disableDepack
+    self._srpPort       = srpPort
+    self._strmPort      = strmPort
+    if self._noStreams:
+      self._strmPort = 0
 
   def ok(self,node):
     return node != None and node.IsDefined()
@@ -23,7 +27,8 @@ class Fixup(pycpsw.YamlFixup):
         print("Fixing IP address; setting to {}\n".format(self._ipAddr))
         ip.set( self._ipAddr )
 
-      if not self._useTcp and not self._noStreams and not self._srpV2 and not self._disableDepack:
+      if (not self._useTcp and not self._noStreams and not self._srpV2
+          and not self._disableDepack and self._srpPort == 0 and self._strmPort == 0):
         return
   
       children = node["children"]
@@ -32,17 +37,23 @@ class Fixup(pycpsw.YamlFixup):
 
       for childit in children:
         #print("Checking {}\n".format(childit.first.Scalar()))
-        child = childit.second
-        at  = self.find(child,"at")
-        if self._noStreams or self._srpV2 or self._disableDepack:
+        child  = childit.second
+        at     = self.find(child,"at")
+        isSrp  = False
+        isStrm = False
+        if (   self._noStreams or self._srpV2 or self._disableDepack
+            or self._srpPort > 0 or self._strmPort > 0 ):
           got = self.findWithPath(at,   "SRP/protocolVersion")
           if None != got:
             (srp, path, parent) = got
             path.insert(0, childit.first.Scalar())
-            if self._noStreams and srp.Scalar() == "SRP_UDP_NONE":
-              child["instantiate"].set("False")
-              print("SRP Node found: {} {} -- disabling\n".format( "/".join(path), srp.Scalar()))
+            if srp.Scalar() == "SRP_UDP_NONE":
+              isStrm = True
+              if self._noStreams:
+                child["instantiate"].set("False")
+                print("SRP Node found: {} {} -- disabling\n".format( "/".join(path), srp.Scalar()))
             else:
+              isSrp = True
               if self._srpV2 and srp.Scalar() == "SRP_UDP_V3":
                 print("SRP Node found: {} {} -- changing to SRP_UDP_V2\n".format( "/".join(path), srp.Scalar()))
                 srp.set("SRP_UDP_V2")
@@ -62,20 +73,29 @@ class Fixup(pycpsw.YamlFixup):
           else:
             #print("Non-SRP Node found: {}\n".format( "/".join(l) ))
             pass
-        if self._useTcp:
+        if self._useTcp or (isSrp and self._srpPort > 0) or (isStrm and self._strmPort > 0):
           got = self.findWithPath(at, "UDP")
+          if None == got:
+            got = self.findWithPath(at, "TCP")
           if None != got:
-            (udp, path, parent) = got
+            (proto, path, parent) = got
             path.insert(0, childit.first.Scalar())
-            prt = self.find(udp, "port")
+            prt = self.find(proto, "port")
           else:
             prt = None
           if self.ok(prt):
-            for x in parent:
-              if x.first.Scalar() == "UDP":
-                print("UDP Node found: {} -- changing to TCP\n".format( "/".join(path) ))
-                x.first.set("TCP")
-                break
+            if isSrp and self._srpPort > 0:
+              print("Changing SRP port to {}".format(self._srpPort))
+              prt.set("{:d}".format(self._srpPort))
+            elif isStrm and self._strmPort > 0:
+              print("Changing Stream port to {}".format(self._strmPort))
+              prt.set("{:d}".format(self._strmPort))
+            if self._useTcp:
+              for x in parent:
+                if x.first.Scalar() == "UDP":
+                  print("UDP Node found: {} -- changing to TCP\n".format( "/".join(path) ))
+                  x.first.set("TCP")
+                  break
           else:
             #print("Non-UDP Node found: {}\n".format( "/".join(l) ))
             pass

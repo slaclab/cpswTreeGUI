@@ -744,26 +744,53 @@ def main1(oargs):
   noStreams     = False
   ipAddr        = None
   disableDepack = False
+  srpPort       = 0
+  strmPort      = 0
 
-  ( opts, args ) = getopt.getopt( oargs[1:], "ha:TBs" )
+  ( opts, args ) = getopt.getopt(
+                      oargs[1:],
+                      "ha:TBs",
+                      ["no-streams",
+                       "tcp",
+                       "srpPort=",
+                       "streamPort=",
+                       "ipAddress=",
+                       "help"] )
 
   for opt in opts:
-    if   opt[0] == '-a':
+    if   opt[0] in ('-a', '--ipAddress'):
       ipAddr        = socket.gethostbyname( opt[1] )
-    elif opt[0] == '-T':
+    elif opt[0] in ('-T', '--tcp'):
       useTcp        = True
-    elif opt[0] == '-B':
+    elif opt[0] in ('-B'):
       srpV2         = True
       noStreams     = True
       disableDepack = True
-    elif opt[0] == '-s':
+    elif opt[0] in ('-s', '--no-streams'):
       noStreams     = True
-    elif opt[0] == '-h':
-      print("Usage: {} [-T] [-a <ip_addr>] [-s] [-B] [-h] yaml_file [root_node [inc_dir_path]]\n".format(oargs[0]))
-      print("          -a <ip_addr>  : patch IP address in YAML\n")
-      print("          -T            : use TCP transport (requires rssi bridge connection)\n")
-      print("          -s            : disable all streams\n")
-      print("          -h            : this message\n")
+    elif opt[0] in ('--srpPort'):
+      srpPort       = int(opt[1],0)
+    elif opt[0] in ('--strmPort'):
+      strmPort      = int(opt[1],0)
+    elif opt[0] in ('-h', '--help'):
+      print("Usage: {} [-a <ip_addr>] [-TsBh] [--<long-opt>] yaml_file [root_node [inc_dir_path]]".format(oargs[0]))
+      print("          -a <ip_addr>  : patch IP address in YAML")
+      print("          -T            : use TCP transport (requires rssi bridge connection)")
+      print("          -s            : disable all streams")
+      print("          -h            : this message")
+      print()
+      print("          yaml_file     : top-level YAML file to load (required)")
+      print("          root_node     : YAML root node (default: \"root\")")
+      print("          inc_dir_path  : directory where to look for included YAML files")
+      print("                          default: directory where 'yaml_file' is located")
+      print()
+      print("  Long Options          :")
+      print("      --ipAddress <addr>: same as -a")
+      print("      --tcp             : same as -T")
+      print("      --help            : same as -h")
+      print("      --no-streams      : same as -s")
+      print("      --srpPort  <port> : patch UDP/TCP port for SRP in YAML")
+      print("      --strmPort <port> : patch UDP/TCP port for stream in YAML")
       return
 
   if len(args) > 0:
@@ -785,7 +812,9 @@ def main1(oargs):
                     srpV2         = srpV2,
                     noStreams     = noStreams,
                     ipAddr        = ipAddr,
-                    disableDepack = disableDepack
+                    disableDepack = disableDepack,
+                    srpPort       = srpPort,
+                    strmPort      = strmPort
                   )
 
   rp = pycpsw.Path.loadYamlFile(
@@ -798,7 +827,6 @@ def main1(oargs):
   signal.signal( signal.SIGINT, signal.SIG_DFL )
   app   = QtGui.QApplication(args)
   modl  = MyModel( rp )
-
   return (modl, app, rp)
 
 def main():
