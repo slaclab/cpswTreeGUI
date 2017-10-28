@@ -1,9 +1,11 @@
-#!/usr/bin/python3 -i
+#!/usr/bin/python3
 
 import sys
+import getopt
 import re
 from   PyQt4                              import QtCore, QtGui
 import pycpsw
+import yaml_cpp
 import signal
 import array
 import numpy as np
@@ -12,6 +14,7 @@ matplotlib.use("Qt4Agg")
 from   matplotlib.figure                  import Figure
 from   matplotlib.backends.backend_qt4agg import FigureCanvasQTAgg    as FigureCanvas
 from   matplotlib.backends.backend_qt4agg import NavigationToolbar2QT as NavigationToolbar
+import fixupYaml
 
 
 class MyModel(QtCore.QAbstractItemModel):
@@ -731,32 +734,75 @@ class RightPressFilter(QtCore.QObject):
         return True
     return super(RighPressFilter, self).eventFilter(obj, event)
 
-def main1(args):
-  signal.signal( signal.SIGINT, signal.SIG_DFL )
-  app = QtGui.QApplication(args)
+def main1(oargs):
 
-  if len(args) > 1:
-    yamlFile = args[1]
+  useTcp        = False
+  srpV2         = False
+  noStreams     = False
+  ipAddr        = None
+  disableDepack = False
+
+  ( opts, args ) = getopt.getopt( oargs[1:], "ha:TBs" )
+
+  for opt in opts:
+    if   opt[0] == '-a':
+      ipAddr        = opt[1]
+    elif opt[0] == '-T':
+      useTcp        = True
+    elif opt[0] == '-B':
+      srpV2         = True
+      noStreams     = True
+      disableDepack = True
+    elif opt[0] == '-s':
+      noStreams     = True
+    elif opt[0] == '-h':
+      print("Usage: {} [-T] [-a <ip_addr>] [-s] [-B] [-h] yaml_file [root_node [inc_dir_path]]\n".format(oargs[0]))
+      print("          -a <ip_addr>  : patch IP address in YAML\n")
+      print("          -T            : use TCP transport (requires rssi bridge connection)\n")
+      print("          -s            : disable all streams\n")
+      print("          -h            : this message\n")
+      return
+
+  if len(args) > 0:
+    yamlFile = args[0]
   else:
-    print("usage: {} <yaml_file> [yaml_root_node_name='root' [yaml_inc_dir=''] ]".format(args[0]))
+    print("usage: {} <yaml_file> [yaml_root_node_name='root' [yaml_inc_dir=''] ]".format(oargs[0]))
     sys.exit(1)
-  if len(args) > 2:
-    yamlRoot = args[2]
+  if len(args) > 1:
+    yamlRoot = args[1]
   else:
     yamlRoot = "root"
-  if len(args) > 3:
-    yamlIncDir = args[3]
+  if len(args) > 2:
+    yamlIncDir = args[2]
   else:
     yamlIncDir = None
-  rp = pycpsw.Path.loadYamlFile(yamlFile, yamlRoot, yamlIncDir)
 
-  m  = MyModel( rp )
+  fixYaml       = fixupYaml.Fixup(
+                    useTcp        = useTcp,
+                    srpV2         = srpV2,
+                    noStreams     = noStreams,
+                    ipAddr        = ipAddr,
+                    disableDepack = disableDepack
+                  )
 
-  return (m, app, rp)
+  rp = pycpsw.Path.loadYamlFile(
+              yamlFile,
+              yamlRoot,
+              yamlIncDir,
+              fixYaml)
+
+
+  signal.signal( signal.SIGINT, signal.SIG_DFL )
+  app   = QtGui.QApplication(args)
+  modl  = MyModel( rp )
+
+  return (modl, app, rp)
 
 def main():
-  (v,app,root)=main1(sys.argv)
-  sys.exit(app.exec_())
+  got = main1(sys.argv)
+  if got != None:
+    (m,app,root) = got
+    sys.exit( app.exec_() )
 
 if __name__ == '__main__':
   main()
