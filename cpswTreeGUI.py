@@ -744,16 +744,14 @@ def main1(oargs):
   noStreams     = False
   ipAddr        = None
   disableDepack = False
-  srpPort       = 0
-  strmPort      = 0
+  portMaps      = []
 
   ( opts, args ) = getopt.getopt(
                       oargs[1:],
                       "ha:TBs",
                       ["no-streams",
                        "tcp",
-                       "srpPort=",
-                       "streamPort=",
+                       "mapPort=",
                        "ipAddress=",
                        "help"] )
 
@@ -768,10 +766,11 @@ def main1(oargs):
       disableDepack = True
     elif opt[0] in ('-s', '--no-streams'):
       noStreams     = True
-    elif opt[0] in ('--srpPort'):
-      srpPort       = int(opt[1],0)
-    elif opt[0] in ('--strmPort'):
-      strmPort      = int(opt[1],0)
+    elif opt[0] in ('--mapPort'):
+      opta = opt[1].split(':')
+      if len(opta) != 2:
+        raise RuntimeError('--mapPort option requires <fromPort>:<toPort> argument')
+      portMaps.append( [ int(num) for num in opta ] )
     elif opt[0] in ('-h', '--help'):
       print("Usage: {} [-a <ip_addr>] [-TsBh] [--<long-opt>] yaml_file [root_node [inc_dir_path]]".format(oargs[0]))
       print("          -a <ip_addr>  : patch IP address in YAML")
@@ -789,8 +788,7 @@ def main1(oargs):
       print("      --tcp             : same as -T")
       print("      --help            : same as -h")
       print("      --no-streams      : same as -s")
-      print("      --srpPort  <port> : patch UDP/TCP port for SRP in YAML")
-      print("      --strmPort <port> : patch UDP/TCP port for stream in YAML")
+      print("      --mapPort <f>:<t> : patch UDP/TCP port '<f>' to port '<t>' in YAML")
       return
 
   if len(args) > 0:
@@ -813,8 +811,7 @@ def main1(oargs):
                     noStreams     = noStreams,
                     ipAddr        = ipAddr,
                     disableDepack = disableDepack,
-                    srpPort       = srpPort,
-                    strmPort      = strmPort
+                    portMaps      = portMaps
                   )
 
   rp = pycpsw.Path.loadYamlFile(
