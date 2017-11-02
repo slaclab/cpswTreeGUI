@@ -174,7 +174,7 @@ class EnumButt(QtGui.QPushButton):
       self.setMenu( menu )
 
   def activated(self, act):
-    self._scalVal.setVal( act.text() )
+    self._scalVal.setVal( str(act.text()) )
 
   def isModified(self):
     return False
@@ -331,7 +331,7 @@ class ScalVal(IfObj):
   @QtCore.pyqtSlot()
   def updateVal(self):
     self.getWidget().setModified(False)
-    txt = self.getWidget().text()
+    txt = str(self.getWidget().text())
     if self._string:
       val  = bytearray(txt, 'ascii')
       fidx = 0
