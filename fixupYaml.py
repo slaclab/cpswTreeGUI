@@ -44,7 +44,7 @@ class Fixup(pycpsw.YamlFixup):
         ip.set( ipAddr )
 
       if (not useTcp and not noStreams and not srpV2
-          and not disableDepack and portMap != None):
+          and not disableDepack and portMap == None):
         return
   
       children = node["children"]
