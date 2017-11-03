@@ -59,7 +59,7 @@ class MyModel(QtCore.QAbstractItemModel):
     if len(indexes) > 0:
         item = indexes[0]
         if item.isValid() and item.internalPointer().childCount(0) > 1:
-	    self._treeMenu.exec_(self._tree.viewport().mapToGlobal(position))
+            self._treeMenu.exec_(self._tree.viewport().mapToGlobal(position))
 
   def loadFromFile(self):
     print("Action triggered.")
