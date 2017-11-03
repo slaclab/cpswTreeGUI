@@ -39,12 +39,49 @@ class MyModel(QtCore.QAbstractItemModel):
     self._tree.setRootIsDecorated( True )
     self._tree.uniformRowHeights()
     self._tree.setMinimumSize(1000, 800)
+    # Context Menu for Tree View
+    self._tree.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
+    self._treeMenu = QtGui.QMenu()
+    self._treeMenu = QtGui.QMenu()
+    loadAction = QtGui.QAction("Load from file...", self)
+    loadAction.triggered.connect(self.loadFromFile)
+    self._treeMenu.addAction(loadAction)
+    self._tree.customContextMenuRequested.connect(self.openMenu)
 
     #QtCore.QObject.connect( self._tree.selectionModel(), QtCore.SIGNAL('selectionChanged(QItemSelection, QItemSelection)'), test)
     QtCore.QObject.connect( self._tree, QtCore.SIGNAL('clicked(QModelIndex)'), test1)
     self._tree.installEventFilter( RightPressFilter() )
     self._tree.setDragEnabled(True)
     self._tree.show()
+
+  def openMenu(self, position):
+    indexes = self._tree.selectedIndexes()
+    if len(indexes) > 0:
+        item = indexes[0]
+        if item.isValid() and item.internalPointer().childCount(0) > 1:
+	    self._treeMenu.exec_(self._tree.viewport().mapToGlobal(position))
+
+  def loadFromFile(self):
+    print("Action triggered.")
+    yaml_file = QtGui.QFileDialog.getOpenFileName(None, 'Open File...', './', 'CPSW Defaults (*.yaml)')
+    yaml_file = yaml_file[0] if isinstance(yaml_file, (list, tuple)) else yaml_file
+    if yaml_file:
+        yaml_file = str(yaml_file)
+        my_node = self._tree.selectedIndexes()[0].internalPointer()
+        path = my_node.buildPath()
+        try:
+            msg = QtGui.QMessageBox()
+            msg.setIcon(QtGui.QMessageBox.Question)
+            msg.setText("Are you sure you want to load the yaml file:\n{}\nat:\n {}".format(yaml_file, path))
+            msg.setStandardButtons(QtGui.QMessageBox.Yes | QtGui.QMessageBox.No)
+            msg.setDefaultButton(QtGui.QMessageBox.No)
+            ret = msg.exec_()
+            if ret == QtGui.QMessageBox.No:
+                return
+            pycpsw.Path.loadConfigFromYamlFile(path, yaml_file, '')
+        except Exception as ex:
+            print("Error while loading config from YAML file.")
+            print("Exception: ", ex)
 
   def setCol0Width(self, width):
     self._col0Width = width
@@ -174,7 +211,7 @@ class EnumButt(QtGui.QPushButton):
       self.setMenu( menu )
 
   def activated(self, act):
-    self._scalVal.setVal( act.text() )
+    self._scalVal.setVal( str(act.text()) )
 
   def isModified(self):
     return False
@@ -359,7 +396,7 @@ class ScalVal(IfObj):
   @QtCore.pyqtSlot()
   def updateVal(self):
     self.getWidget().setModified(False)
-    txt = self.getWidget().text()
+    txt = str(self.getWidget().text())
     if self._string:
       val  = bytearray(txt, 'ascii')
       fidx = 0
