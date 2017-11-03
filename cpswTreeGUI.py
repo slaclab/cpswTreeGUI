@@ -124,7 +124,7 @@ class MyModel(QtCore.QAbstractItemModel):
       return None
 
   def index(self, in_row, in_col, in_parent):
-    if not in_parent or not in_parent.isValid():
+    if None == in_parent or not in_parent.isValid():
       parent = self._root
     else:
       parent = in_parent.internalPointer()
@@ -133,7 +133,7 @@ class MyModel(QtCore.QAbstractItemModel):
       return QtCore.QModelIndex()
 
     child = parent.child(in_row, in_parent)
-    if child:
+    if child != None:
       idx = QtCore.QAbstractItemModel.createIndex(self, in_row, in_col, child)
       return idx
     else:
@@ -247,57 +247,85 @@ class ScalVal(IfObj):
 
   _sig = QtCore.pyqtSignal(object)
 
+  _ReprOther  = 0
+  _ReprInt    = 1
+  _ReprString = 2
+  _ReprFloat  = 3
+
   @staticmethod
   def isStringHeuristic(sv):
     if sv.getNelms() > 1 and not sv.getEnum() and 8 == sv.getSizeBits():
       try:
         bytearray(sv.getVal()).decode('ascii')
+        return ScalVal._ReprString
       except:
-        return False
-      return True
-    return False
+        pass
+    return ScalVal._ReprInt
 
   # use heuristics to detect an ascii string
   @staticmethod
-  def maybeString(sv, path):
-    if not sv:
+  def guessRepr(sv, path):
+    if None == sv:
       try:
         sv = pycpsw.ScalVal_Base.create( path )
       except pycpsw.InterfaceNotImplementedError:
-        return False
+        print("{} -- OTHER".format(path.toString()))
+        return ScalVal._ReprOther
     # if the encoding is NONE then getEncoding returns the 'None' object
     # "NONE" is returned if there is an unknown code
     if sv.getEncoding() == "NONE":
-        return False
-    rval = { "ASCII" : True, "CUSTOM_0" : False }.get(
+        print("{} -- INT".format(path.toString()))
+        return ScalVal._ReprInt
+    rval = { "ASCII" : ScalVal._ReprString, "IEEE_754" : ScalVal._ReprFloat, "CUSTOM_0" : ScalVal._ReprInt }.get(
         sv.getEncoding(),
         ScalVal.isStringHeuristic(sv)
-	)
+	    ) 
+    print("{} -- {:d}".format(path.toString(), rval))
     return rval;
 
   def __init__(self, path, node, widget_index ):
     IfObj.__init__(self)
 
-    readOnly = False
-    try:
-      self._val    = pycpsw.ScalVal.create( path )
-    except pycpsw.InterfaceNotImplementedError:
-      self._val    = pycpsw.ScalVal_RO.create( path )
-      readOnly     = True
+    readOnly       = False
+    self._isFloat  = False
+
+    representation = ScalVal.guessRepr( None, path )
+
+    # If the representation is 'Other' then this is certainly not
+    # a ScalVal - but it could still be a DoubleVal.
+    # If the representation is 'Float' then it could be a ScalVal for
+    # which the Float representation was chosen deliberately (in yaml) 
+    if representation in (ScalVal._ReprOther, ScalVal._ReprFloat):
+      print("Creating a FLT")
+      try:
+        self._val = pycpsw.DoubleVal.create( path )
+      except pycpsw.InterfaceNotImplementedError:
+        self._val = pycpsw.DoubleVal_RO.create( path )
+        readOnly  = True
+      self._isFloat = True
+    else:
+      try:
+        self._val    = pycpsw.ScalVal.create( path )
+      except pycpsw.InterfaceNotImplementedError:
+        self._val    = pycpsw.ScalVal_RO.create( path )
+        readOnly     = True
 
     self._node        = node
     print('creating ' + path.toString())
     self._cbHelper = CallbackHelper( self )
 
-    self._enum     = self._val.getEnum()
+    if not self._isFloat:
+      self._enum   = self._val.getEnum()
+    else:
+      self._enum   = None
     nelms          = path.getNelms()
 
-    if self.maybeString(self._val, None):
+    if representation == ScalVal._ReprString:
       self._string = bytearray(nelms) 
     else:
       self._string = None
 
-    if nelms > 1 and not self._string:
+    if nelms > 1 and None != self._string:
       raise pycpsw.InterfaceNotImplementedError("Non-String arrays (ScalVal) not supported")
     
     if self._enum:
@@ -308,7 +336,10 @@ class ScalVal(IfObj):
       widgt.setFrame( not readOnly )
       if not readOnly:
         if not self._string:
-          validator = ScalValidator( self )
+          if self._isFloat:
+            validator = QtGui.QDoubleValidator()
+          else:
+            validator = ScalValidator( self )
           widgt.setValidator( validator )
         # returnPressed is only emitted if the string passes validation
         QtCore.QObject.connect( widgt, QtCore.SIGNAL("returnPressed()"),   self.updateVal )
@@ -320,9 +351,6 @@ class ScalVal(IfObj):
     self.updateTxt( self._cachedVal )
     node._model.addPoll( self )
     self._sig.connect( self.updateTxt )
-    # Access is slow because it's synchronous. For speedup CPSW would have to
-    # implement asynchronous I/O (but that would not really be its job; better
-    # to use tools which already do that such as EPICS).
 
   def callbackIssuer(self):
     return self._val.getPath().toString()
@@ -342,7 +370,10 @@ class ScalVal(IfObj):
       else:
         tidx = slen - 1
     else:
-      val  = int(txt, 0)
+      if self._isFloat:
+        val = float(txt)
+      else:
+        val  = int(txt, 0)
       fidx = -1
       tidx = -1
     self._val.setVal( val, fidx, tidx )
@@ -365,7 +396,7 @@ class ScalVal(IfObj):
       strVal = "???"
     else:
       # assume they want signed numbers in decimal
-      if self._val.isSigned() or self._enum or self._string:
+      if self._isFloat or self._val.isSigned() or self._enum or self._string:
         strVal = '{}'.format( newVal )
       else:
         w = int((self._val.getSizeBits() + 3)/4) # leading 0x goes into width
@@ -564,7 +595,7 @@ class MyNode(object):
           # could be a string -- in this case we wouldn't want to expand
           if not childHub and nelms <= leafmax:
             try:
-              if ScalVal.maybeString( None, path.findByName( child.getName() ) ):
+              if ScalVal._ReprString == ScalVal.guessRepr( None, path.findByName( child.getName() ) ):
                 leafmax = 0
             except pycpsw.InterfaceNotImplementedError:
               pass
