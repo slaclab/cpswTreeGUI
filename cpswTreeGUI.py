@@ -57,7 +57,7 @@ class MyModel(QtCore.QAbstractItemModel):
     indexes = self._tree.selectedIndexes()
     if len(indexes) > 0:
         item = indexes[0]
-        if item.isValid() and item.internalPointer().childCount(0) > 1:
+        if item.isValid():
             self._treeMenu.exec_(self._tree.viewport().mapToGlobal(position))
 
   def loadFromFile(self):
