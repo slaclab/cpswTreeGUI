@@ -311,7 +311,7 @@ class ScalVal(IfObj):
     # "NONE" is returned if there is an unknown code
     if sv.getEncoding() == "NONE":
         print("{} -- INT".format(path.toString()))
-        return ScalVal._ReprInt
+        return ScalVal._ReprOther
     rval = { "ASCII" : ScalVal._ReprString, "IEEE_754" : ScalVal._ReprFloat, "CUSTOM_0" : ScalVal._ReprInt }.get(
         sv.getEncoding(),
         ScalVal.isStringHeuristic(sv)
