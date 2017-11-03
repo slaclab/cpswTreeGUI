@@ -42,7 +42,6 @@ class MyModel(QtCore.QAbstractItemModel):
     # Context Menu for Tree View
     self._tree.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
     self._treeMenu = QtGui.QMenu()
-    self._treeMenu = QtGui.QMenu()
     loadAction = QtGui.QAction("Load from file...", self)
     loadAction.triggered.connect(self.loadFromFile)
     self._treeMenu.addAction(loadAction)
@@ -78,7 +77,7 @@ class MyModel(QtCore.QAbstractItemModel):
             ret = msg.exec_()
             if ret == QtGui.QMessageBox.No:
                 return
-            pycpsw.Path.loadConfigFromYamlFile(path, yaml_file, '')
+            pycpsw.Path.loadConfigFromYamlFile(path, yaml_file)
         except Exception as ex:
             print("Error while loading config from YAML file.")
             print("Exception: ", ex)
