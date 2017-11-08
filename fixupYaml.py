@@ -102,9 +102,16 @@ class Fixup(pycpsw.YamlFixup):
           if self.ok(prt):
             if portMap != None:
               origPort = int( prt.getAs(), 0 )
-              if origPort == portMap[0]:
-                print("Changing port {:d} to {:d}".format(origPort, portMap[1]))
-                prt.set("{:d}".format(portMap[1]))
+              if portMap[1] == 0:
+                if origPort == portMap[0]:
+                  print("Keeping port   {:d}".format(origPort))
+                else:
+                  print("Disabling port {:d}".format(origPort))
+                  child["instantiate"].set("False")
+              else:
+                if origPort == portMap[0]:
+                  print("Changing port {:d} to {:d}".format(origPort, portMap[1]))
+                  prt.set("{:d}".format(portMap[1]))
             if useTcp:
               for x in parent:
                 if x.first.Scalar() == "UDP":
