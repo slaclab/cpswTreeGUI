@@ -289,10 +289,16 @@ class ScalVal(IfObj):
   _ReprFloat  = 3
 
   @staticmethod
-  def isStringHeuristic(sv):
-    if sv.getNelms() > 1 and not sv.getEnum() and 8 == sv.getSizeBits():
+  def isStringHeuristic( svb ):
+    if svb.getNelms() > 1 and not svb.getEnum() and 8 == svb.getSizeBits():
+      print("ISH")
       try:
-        bytearray(sv.getVal()).decode('ascii')
+        # there is some really slow I/O out there; limit number of chars
+        sv = pycpsw.ScalVal_RO.create( svb.getPath() )
+        to = svb.getNelms()
+        if to > 20:
+          to = 20
+        bytearray(sv.getVal(fromIdx=0, toIdx=to)).decode('ascii')
         return ScalVal._ReprString
       except:
         pass
@@ -305,18 +311,16 @@ class ScalVal(IfObj):
       try:
         sv = pycpsw.ScalVal_Base.create( path )
       except pycpsw.InterfaceNotImplementedError:
-        print("{} -- OTHER".format(path.toString()))
         return ScalVal._ReprOther
     # if the encoding is NONE then getEncoding returns the 'None' object
     # "NONE" is returned if there is an unknown code
     if sv.getEncoding() == "NONE":
         print("{} -- INT".format(path.toString()))
         return ScalVal._ReprOther
-    rval = { "ASCII" : ScalVal._ReprString, "IEEE_754" : ScalVal._ReprFloat, "CUSTOM_0" : ScalVal._ReprInt }.get(
-        sv.getEncoding(),
-        ScalVal.isStringHeuristic(sv)
-	    ) 
-    print("{} -- {:d}".format(path.toString(), rval))
+    rval = { "ASCII" : ScalVal._ReprString, "IEEE_754" : ScalVal._ReprFloat, "CUSTOM_0" : ScalVal._ReprInt }.get(sv.getEncoding())
+    if rval == None:
+      rval = ScalVal.isStringHeuristic( sv )
+    print("{} -- enc {} ({:d})".format(path.toString(), sv.getEncoding(), rval)) 
     return rval;
 
   def __init__(self, path, node, widget_index ):
@@ -332,7 +336,6 @@ class ScalVal(IfObj):
     # If the representation is 'Float' then it could be a ScalVal for
     # which the Float representation was chosen deliberately (in yaml) 
     if representation in (ScalVal._ReprOther, ScalVal._ReprFloat):
-      print("Creating a FLT")
       try:
         self._val = pycpsw.DoubleVal.create( path )
       except pycpsw.InterfaceNotImplementedError:
@@ -361,7 +364,7 @@ class ScalVal(IfObj):
     else:
       self._string = None
 
-    if nelms > 1 and None != self._string:
+    if nelms > 1 and None == self._string:
       raise pycpsw.InterfaceNotImplementedError("Non-String arrays (ScalVal) not supported")
     
     if self._enum:
@@ -629,7 +632,7 @@ class MyNode(object):
         nexpand  = nelms
         if nelms > 1:
           # could be a string -- in this case we wouldn't want to expand
-          if not childHub and nelms <= leafmax:
+          if not childHub:
             try:
               if ScalVal._ReprString == ScalVal.guessRepr( None, path.findByName( child.getName() ) ):
                 leafmax = 0
@@ -812,6 +815,7 @@ def main1(oargs):
   ipAddr        = None
   disableDepack = False
   portMaps      = []
+  backDoor      = False
 
   ( opts, args ) = getopt.getopt(
                       oargs[1:],
@@ -828,9 +832,7 @@ def main1(oargs):
     elif opt[0] in ('-T', '--tcp'):
       useTcp        = True
     elif opt[0] in ('-B'):
-      srpV2         = True
-      noStreams     = True
-      disableDepack = True
+      backDoor      = True
     elif opt[0] in ('-s', '--no-streams'):
       noStreams     = True
     elif opt[0] in ('--mapPort'):
@@ -857,6 +859,18 @@ def main1(oargs):
       print("      --no-streams      : same as -s")
       print("      --mapPort <f>:<t> : patch UDP/TCP port '<f>' to port '<t>' in YAML")
       return
+
+  if backDoor:
+    srpV2         = True
+    noStreams     = True
+    disableDepack = True
+    if len(portMaps) > 1:
+      portMaps = [ portMaps[0] ]
+    if len(portMaps) == 1:
+      if portMaps[0][1] != 0:
+        portMaps.append( [ portMaps[0][1], 0 ] )
+    else:
+      portMaps = [ [ 8193, 0 ] ]
 
   if len(args) > 0:
     yamlFile = args[0]
