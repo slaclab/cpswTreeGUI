@@ -862,10 +862,7 @@ def main1(oargs):
       print("Usage: {} [-a <ip_addr>] [-TsBh] [--<long-opt>] yaml_file [root_node [inc_dir_path]]".format(oargs[0]))
       print()
       print("          -a <ip_addr>         : patch IP address in YAML")
-      print("          -B                   : patch YAML for \"backdoor\" access; implies '-s' and")
-      print("                                 many features are altered: no RSSI/depacketizer/TDESTMux,")
-      print("                                 SRP protocol is altered to V2 and only one port (8193) is enabled.")
-      print("                                 SRP protocol is altered to V2 and only one port is enabled.")
+      print("          -B                   : see '--backdoor' -- EXPERT USE ONLY")
       print("          -T                   : use TCP transport (requires rssi bridge connection)")
       print("          -s                   : disable all streams")
       print("          -h                   : this message")
@@ -886,6 +883,13 @@ def main1(oargs):
       print("      --no-string-heuristics   : disable some tests which guess if a value is a")
       print("                                 string. Some slow devices may take a long time")
       print("                                 to respond. If this annoys you try this option.")
+      print("      --backdoor               : patch YAML for \"backdoor\" access; implies '-s' and")
+      print("                                 many features are altered: no RSSI/depacketizer/TDESTMux,")
+      print("                                 SRP protocol is altered to V2 and only one port is enabled.")
+      print("                                 By default this is port 8193 if --tcp is given and 8192")
+      print("                                 otherwise. You still need to specify --tcp when using")
+      print("                                 the rssi_bridge. If you need a non-standard port then")
+      print("                                 use '--mapPort'")
       return
 
   if not strHeuristic:
