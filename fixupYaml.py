@@ -62,6 +62,7 @@ class Fixup(pycpsw.YamlFixup):
           got = self.findWithPath(at,   "SRP/protocolVersion")
           if None != got:
             (srp, path, parent) = got
+            path.insert(0, "at")
             path.insert(0, childit.first.Scalar())
             if srp.Scalar() == "SRP_UDP_NONE":
               isStrm = True
@@ -77,15 +78,17 @@ class Fixup(pycpsw.YamlFixup):
                 got = self.findWithPath(at, "depack")
                 if None != got:
                   (node, path, parent) = got
+                  path.insert(0, "at")
                   path.insert(0, childit.first.Scalar())
                   print("depack found: {} -- disabling\n".format( "/".join(path)))
-                  parent.remove("depack")
+                  node["instantiate"].set("False")
                 got = self.findWithPath(at, "TDESTMux")
                 if None != got:
                   (node, path, parent) = got
+                  path.insert(0, "at")
                   path.insert(0, childit.first.Scalar())
                   print("TDESTMux found: {} -- disabling\n".format( "/".join(path)))
-                  parent.remove("TDESTMux")
+                  node["instantiate"].set("False")
           else:
             #print("Non-SRP Node found: {}\n".format( "/".join(l) ))
             pass
@@ -95,6 +98,7 @@ class Fixup(pycpsw.YamlFixup):
             got = self.findWithPath(at, "TCP")
           if None != got:
             (proto, path, parent) = got
+            path.insert(0, "at")
             path.insert(0, childit.first.Scalar())
             prt = self.find(proto, "port")
           else:
@@ -182,6 +186,9 @@ class Fixup(pycpsw.YamlFixup):
         l.pop()
 
   def fixup(self, node):
+    self(node, None)
+
+  def __call__(self, node, top):
     if self._ipAddr != None or self._useTcp or self._noStreams or self._srpV2 or self._disableDepack or len(self._portMaps) > 0:
       to = len(self._portMaps)
       if to == 0:
