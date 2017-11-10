@@ -45,6 +45,9 @@ class MyModel(QtCore.QAbstractItemModel):
     loadAction = QtGui.QAction("Load from file...", self)
     loadAction.triggered.connect(self.loadFromFile)
     self._treeMenu.addAction(loadAction)
+    pathAction = QtGui.QAction("Copy 'Path' to clipboard...", self)
+    pathAction.triggered.connect(self.copyPathToClipboard)
+    self._treeMenu.addAction(pathAction)
     self._tree.customContextMenuRequested.connect(self.openMenu)
 
     #QtCore.QObject.connect( self._tree.selectionModel(), QtCore.SIGNAL('selectionChanged(QItemSelection, QItemSelection)'), test)
@@ -61,7 +64,6 @@ class MyModel(QtCore.QAbstractItemModel):
             self._treeMenu.exec_(self._tree.viewport().mapToGlobal(position))
 
   def loadFromFile(self):
-    print("Action triggered.")
     yaml_file = QtGui.QFileDialog.getOpenFileName(None, 'Open File...', './', 'CPSW Defaults (*.yaml)')
     yaml_file = yaml_file[0] if isinstance(yaml_file, (list, tuple)) else yaml_file
     if yaml_file:
@@ -81,6 +83,11 @@ class MyModel(QtCore.QAbstractItemModel):
         except Exception as ex:
             print("Error while loading config from YAML file.")
             print("Exception: ", ex)
+
+  def copyPathToClipboard(self):
+    my_node = self._tree.selectedIndexes()[0].internalPointer()
+    path = my_node.buildPath()
+    QtGui.QApplication.clipboard().setText( path.toString() )
 
   def setCol0Width(self, width):
     self._col0Width = width
