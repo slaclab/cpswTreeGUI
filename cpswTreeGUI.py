@@ -279,6 +279,37 @@ class CallbackHelper(pycpsw.AsyncIO):
       print("Exception Info {}".format(sys.exc_info()[0]))
       sys.exit(1)
 
+class StringHeuristics:
+  def __init__(self):
+    raise RuntimeError("This class cannot instantiate objects")
+
+  _enabled = True
+
+  @staticmethod
+  def enable():
+    StringHeuristics._enabled = True
+
+  def disable():
+    StringHeuristics._enabled = False
+
+  @staticmethod
+  def isString( svb ):
+    if not StringHeuristics._enabled:
+      print("DISA")
+      return False
+    if svb.getNelms() > 1 and not svb.getEnum() and 8 == svb.getSizeBits():
+      try:
+        # there is some really slow I/O out there; limit number of chars
+        sv = pycpsw.ScalVal_RO.create( svb.getPath() )
+        to = svb.getNelms()
+        if to > 20:
+          to = 20
+        bytearray(sv.getVal(fromIdx=0, toIdx=to)).decode('ascii')
+        return True
+      except:
+        pass
+    return False
+
 class ScalVal(IfObj):
 
   _sig = QtCore.pyqtSignal(object)
@@ -287,22 +318,6 @@ class ScalVal(IfObj):
   _ReprInt    = 1
   _ReprString = 2
   _ReprFloat  = 3
-
-  @staticmethod
-  def isStringHeuristic( svb ):
-    if svb.getNelms() > 1 and not svb.getEnum() and 8 == svb.getSizeBits():
-      print("ISH")
-      try:
-        # there is some really slow I/O out there; limit number of chars
-        sv = pycpsw.ScalVal_RO.create( svb.getPath() )
-        to = svb.getNelms()
-        if to > 20:
-          to = 20
-        bytearray(sv.getVal(fromIdx=0, toIdx=to)).decode('ascii')
-        return ScalVal._ReprString
-      except:
-        pass
-    return ScalVal._ReprInt
 
   # use heuristics to detect an ascii string
   @staticmethod
@@ -315,12 +330,10 @@ class ScalVal(IfObj):
     # if the encoding is NONE then getEncoding returns the 'None' object
     # "NONE" is returned if there is an unknown code
     if sv.getEncoding() == "NONE":
-        print("{} -- INT".format(path.toString()))
         return ScalVal._ReprOther
     rval = { "ASCII" : ScalVal._ReprString, "IEEE_754" : ScalVal._ReprFloat, "CUSTOM_0" : ScalVal._ReprInt }.get(sv.getEncoding())
     if rval == None:
-      rval = ScalVal.isStringHeuristic( sv )
-    print("{} -- enc {} ({:d})".format(path.toString(), sv.getEncoding(), rval)) 
+      rval = { True: ScalVal._ReprString, False: ScalVal._ReprInt }.get( StringHeuristics.isString( sv ) )
     return rval;
 
   def __init__(self, path, node, widget_index ):
@@ -816,11 +829,14 @@ def main1(oargs):
   disableDepack = False
   portMaps      = []
   backDoor      = False
+  strHeuristic  = True
 
   ( opts, args ) = getopt.getopt(
                       oargs[1:],
                       "ha:TBs",
-                      ["no-streams",
+                      ["backdoor",
+                       "no-streams",
+                       "no-string-heuristics",
                        "tcp",
                        "mapPort=",
                        "ipAddress=",
@@ -831,10 +847,12 @@ def main1(oargs):
       ipAddr        = socket.gethostbyname( opt[1] )
     elif opt[0] in ('-T', '--tcp'):
       useTcp        = True
-    elif opt[0] in ('-B'):
+    elif opt[0] in ('-B', '--backdoor'):
       backDoor      = True
     elif opt[0] in ('-s', '--no-streams'):
       noStreams     = True
+    elif opt[0] in ('--no-string-heuristics'):
+      strHeuristic  = False
     elif opt[0] in ('--mapPort'):
       opta = opt[1].split(':')
       if len(opta) != 2:
@@ -842,23 +860,36 @@ def main1(oargs):
       portMaps.append( [ int(num) for num in opta ] )
     elif opt[0] in ('-h', '--help'):
       print("Usage: {} [-a <ip_addr>] [-TsBh] [--<long-opt>] yaml_file [root_node [inc_dir_path]]".format(oargs[0]))
-      print("          -a <ip_addr>  : patch IP address in YAML")
-      print("          -T            : use TCP transport (requires rssi bridge connection)")
-      print("          -s            : disable all streams")
-      print("          -h            : this message")
       print()
-      print("          yaml_file     : top-level YAML file to load (required)")
-      print("          root_node     : YAML root node (default: \"root\")")
-      print("          inc_dir_path  : directory where to look for included YAML files")
-      print("                          default: directory where 'yaml_file' is located")
+      print("          -a <ip_addr>         : patch IP address in YAML")
+      print("          -B                   : patch YAML for \"backdoor\" access; implies '-s' and")
+      print("                                 many features are altered: no RSSI/depacketizer/TDESTMux,")
+      print("                                 SRP protocol is altered to V2 and only one port (8193) is enabled.")
+      print("                                 SRP protocol is altered to V2 and only one port is enabled.")
+      print("          -T                   : use TCP transport (requires rssi bridge connection)")
+      print("          -s                   : disable all streams")
+      print("          -h                   : this message")
       print()
-      print("  Long Options          :")
-      print("      --ipAddress <addr>: same as -a")
-      print("      --tcp             : same as -T")
-      print("      --help            : same as -h")
-      print("      --no-streams      : same as -s")
-      print("      --mapPort <f>:<t> : patch UDP/TCP port '<f>' to port '<t>' in YAML")
+      print("          yaml_file            : top-level YAML file to load (required)")
+      print("          root_node            : YAML root node (default: \"root\")")
+      print("          inc_dir_path         : directory where to look for included YAML files")
+      print("                                 default: directory where 'yaml_file' is located")
+      print()
+      print("  Long Options                 :")
+      print("      --ipAddress <addr>       : same as -a")
+      print("      --tcp                    : same as -T")
+      print("      --help                   : same as -h")
+      print("      --no-streams             : same as -s")
+      print("      --mapPort <f>:<t>        : patch UDP/TCP port '<f>' to port '<t>' in YAML")
+      print("                                 i.e., if a port is 'f' in YAML then change it")
+      print("                                 to 't'")
+      print("      --no-string-heuristics   : disable some tests which guess if a value is a")
+      print("                                 string. Some slow devices may take a long time")
+      print("                                 to respond. If this annoys you try this option.")
       return
+
+  if not strHeuristic:
+    StringHeuristics.disable()
 
   if backDoor:
     srpV2         = True
@@ -870,7 +901,7 @@ def main1(oargs):
       if portMaps[0][1] != 0:
         portMaps.append( [ portMaps[0][1], 0 ] )
     else:
-      portMaps = [ [ 8193, 0 ] ]
+      portMaps = [ [ { True: 8193, False: 8192 }.get( useTcp ), 0 ] ]
 
   if len(args) > 0:
     yamlFile = args[0]
