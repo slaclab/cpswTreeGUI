@@ -544,7 +544,7 @@ class Poller(QtCore.QThread):
   def __init__(self, pollMs):
     QtCore.QThread.__init__(self)
     self._pollMs = pollMs
-    self._mtx    = QtCore.QMutex()
+    self._mtx    = QtCore.QMutex(QtCore.QMutex.Recursive)
     self._list   = []
     self.start()
     self._update = True
@@ -586,7 +586,7 @@ class MyNode(object):
     self._hub      = child.isHub()
     self._row      = row
     self._parent   = parent
-    self._mtx      = QtCore.QMutex()
+    self._mtx      = QtCore.QMutex(QtCore.QMutex.Recursive)
     self._ifObj    = None
 
   def setIfObj(self, ifObj):
