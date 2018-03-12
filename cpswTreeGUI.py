@@ -927,7 +927,6 @@ def main1(oargs):
     yamlIncDir = args[2]
   else:
     yamlIncDir = None
-
   fixYaml       = fixupYaml.Fixup(
                     useTcp        = useTcp,
                     srpV2         = srpV2,
@@ -936,21 +935,25 @@ def main1(oargs):
                     disableDepack = disableDepack,
                     portMaps      = portMaps
                   )
+  app      = QtGui.QApplication(args)
+  modl, rp = startGUI(yamlFile, yamlRoot, fixYaml, yamlIncDir)
+  return (modl, app, rp)
 
+def startGUI(yamlFile, yamlRoot, fixYaml=None, yamlIncDir=None):
   rp = pycpsw.Path.loadYamlFile(
               yamlFile,
               yamlRoot,
               yamlIncDir,
               fixYaml)
-
-
   signal.signal( signal.SIGINT, signal.SIG_DFL )
-  app   = QtGui.QApplication(args)
   modl  = MyModel( rp )
-  return (modl, app, rp)
+  return (modl, rp)
 
 def main():
-  got = main1(sys.argv)
+  return main2(sys.argv)
+
+def main2(args):
+  got = main1(args)
   if got != None:
     (m,app,root) = got
     sys.exit( app.exec_() )
