@@ -218,9 +218,16 @@ class VarAdapt:
       self._enumItems = self._enumItems.getItems()
     self._readOnly  = readOnly
     self._repr      = reprType
+    self._cbHelper  = CallbackHelper( self )
 
-  def setVal(self, val):
-    self._var.setVal( val )
+  def setVal(self, val, fromIdx = -1, toIdx = -1):
+    self._var.setVal( val, fromIdx=fromIdx, toIdx=toIdx )
+
+  def setWidget(self, widgt):
+    self._widgt     = widgt
+
+  def getValAsync(self):
+    self._var.getValAsync( self._cbHelper )
 
   def isReadOnly(self):
     return self._readOnly
@@ -233,6 +240,25 @@ class VarAdapt:
 
   def isSigned(self):
     return self._var.isSigned()
+
+  def getRepr(self):
+    return self._repr
+
+  def isFloat(self):
+    return self.getRepr() == VarAdapt._ReprFloat
+
+  def isString(self):
+    return self.getRepr() == VarAdapt._ReprString
+
+  def toString(self):
+    return self._var.getPath().toString()
+
+  # Called by Async IO Completion
+  def callback(self, value):
+    self._widgt.asyncUpdateWidget( value )
+
+  def needPoll(self):
+    return True
 
 class EnumButt(QtGui.QPushButton):
   def __init__(self, var, parent = None):
@@ -254,11 +280,11 @@ class EnumButt(QtGui.QPushButton):
 
 # Validate text input for compatibility with a scalar value
 class ScalValidator(QtGui.QValidator):
-  def __init__(self, scalVal, parent=None):
+  def __init__(self, scalWid, parent=None):
     QtGui.QValidator.__init__(self, parent)
-    nb            = scalVal.getVar().getSizeBits()
-    self._scalVal = scalVal
-    if scalVal.getVar().isSigned():
+    nb            = scalWid.getVar().getSizeBits()
+    self._scalWid = scalWid
+    if scalWid.getVar().isSigned():
       self._lo = - (1<<(nb-1))
       self._hi = (1<<(nb-1)) - 1
     else:
@@ -278,7 +304,7 @@ class ScalValidator(QtGui.QValidator):
 
   # restore the original text
   def fixup(self, s):
-    self._scalVal.restoreTxt()
+    self._scalWid.restoreTxt()
 
 class IfObj(QtCore.QObject):
   def __init__(self, parent=None):
@@ -314,6 +340,7 @@ class CallbackHelper(pycpsw.AsyncIO):
     except:
       print("Exception in callback -- Issuer:{}".format( self._real_callback.callbackIssuer() ) )
       print("Exception Info {}".format(sys.exc_info()[0]))
+      print("Callback arg: {}".format(arg))
       sys.exit(1)
 
 class StringHeuristics:
@@ -347,112 +374,37 @@ class StringHeuristics:
         pass
     return False
 
-class ScalWidget(IfObj):
-  def __init__(self, var):
-    IfObj.__init__(self)
-    self._var = var
-    readOnly  = var.isReadOnly()
-    if None != var.getEnumItems():
-      widgt       = EnumButt( var )
-    else:
-      widgt       = LineEditWrapper()
-      widgt.setReadOnly( readOnly )
-      widgt.setFrame( not readOnly )
-      if not readOnly:
-        if not self._string:
-          if self._isFloat:
-            validator = QtGui.QDoubleValidator()
-          else:
-            validator = ScalValidator( self )
-          widgt.setValidator( validator )
-        # returnPressed is only emitted if the string passes validation
-        QtCore.QObject.connect( widgt, QtCore.SIGNAL("returnPressed()"),   self.updateVal )
-        # editingFinished is emitted after returnPressed or lost focus (with valid string)
-        # if we lose focus w/o return being hit then we restore the original string
-        QtCore.QObject.connect( widgt, QtCore.SIGNAL("editingFinished()"), self.restoreTxt  )
-    self.setWidget(widgt)
-    self._cachedVal = None;
-    self.updateTxt( self._cachedVal )
-    node._model.addPoll( self )
-    self._sig.connect( self.updateTxt )
-
-
 class ScalVal(IfObj):
 
   _sig = QtCore.pyqtSignal(object)
 
-  # use heuristics to detect an ascii string
-  @staticmethod
-  def guessRepr(sv, path):
-    if None == sv:
-      try:
-        sv = pycpsw.ScalVal_Base.create( path )
-      except pycpsw.InterfaceNotImplementedError:
-        return VarAdapt._ReprOther
-    # if the encoding is NONE then getEncoding returns the 'None' object
-    # "NONE" is returned if there is an unknown code
-    if sv.getEncoding() == "NONE":
-        return VarAdapt._ReprOther
-    rval = { "ASCII" : VarAdapt._ReprString, "IEEE_754" : VarAdapt._ReprFloat, "CUSTOM_0" : VarAdapt._ReprInt }.get(sv.getEncoding())
-    if rval == None:
-      rval = { True: VarAdapt._ReprString, False: VarAdapt._ReprInt }.get( StringHeuristics.isString( sv ) )
-    return rval;
-
   def __init__(self, path, node, widget_index ):
     IfObj.__init__(self)
 
-    readOnly       = False
-    self._isFloat  = False
-
-    representation = ScalVal.guessRepr( None, path )
-
-    # If the representation is 'Other' then this is certainly not
-    # a ScalVal - but it could still be a DoubleVal.
-    # If the representation is 'Float' then it could be a ScalVal for
-    # which the Float representation was chosen deliberately (in yaml) 
-    if representation in (VarAdapt._ReprOther, VarAdapt._ReprFloat):
-      try:
-        self._val = pycpsw.DoubleVal.create( path )
-      except pycpsw.InterfaceNotImplementedError:
-        self._val = pycpsw.DoubleVal_RO.create( path )
-        readOnly  = True
-      self._isFloat = True
-    else:
-      try:
-        self._val    = pycpsw.ScalVal.create( path )
-      except pycpsw.InterfaceNotImplementedError:
-        self._val    = pycpsw.ScalVal_RO.create( path )
-        readOnly     = True
-
-    self._var      = VarAdapt( self._val, readOnly, representation )
-
-    self._node     = node
     print('creating ' + path.toString())
-    self._cbHelper = CallbackHelper( self )
 
-    if not self._isFloat and self._val.getEnum() != None:
-      self._enum   = True
-    else:
-      self._enum   = False
-    nelms          = path.getNelms()
+    self._var  = path.createVar()
 
-    if representation == VarAdapt._ReprString:
+    self._var.setWidget( self )
+
+    self._node = node
+    readOnly   = self._var.isReadOnly()
+    nelms      = path.getNelms()
+
+    if self._var.getRepr() == VarAdapt._ReprString:
       self._string = bytearray(nelms) 
     else:
       self._string = None
 
-    if nelms > 1 and None == self._string:
-      raise pycpsw.InterfaceNotImplementedError("Non-String arrays (ScalVal) not supported")
-    
-    if self._enum:
-      widgt       = EnumButt( self.getVar() )
+    if None != self._var.getEnumItems():
+      widgt       = EnumButt( self._var )
     else:
       widgt       = LineEditWrapper()
       widgt.setReadOnly( readOnly )
       widgt.setFrame( not readOnly )
       if not readOnly:
-        if not self._string:
-          if self._isFloat:
+        if not self._var.isString():
+          if self._var.isFloat():
             validator = QtGui.QDoubleValidator()
           else:
             validator = ScalValidator( self )
@@ -465,37 +417,24 @@ class ScalVal(IfObj):
     self.setWidget(widgt)
     self._cachedVal = None;
     self.updateTxt( self._cachedVal )
-    node._model.addPoll( self )
     self._sig.connect( self.updateTxt )
-
+    if self._var.needPoll():
+      node._model.addPoll( self )
+    
   def getVar(self):
     return self._var
 
   def callbackIssuer(self):
-    return self._val.getPath().toString()
+    return self._var.toString()
 
-  # write ScalVal from user text input
-  @QtCore.pyqtSlot()
-  def updateVal(self):
-    self.getWidget().setModified(False)
-    txt = str(self.getWidget().text())
-    if self._string:
-      val  = bytearray(txt, 'ascii')
-      fidx = 0
-      tidx = len(val)
-      slen = len(self._string)
-      if tidx < slen:
-        val.append(0)
-      else:
-        tidx = slen - 1
-    else:
-      if self._isFloat:
-        val = float(txt)
-      else:
-        val  = int(txt, 0)
-      fidx = -1
-      tidx = -1
-    self._val.setVal( val, fidx, tidx )
+  # read value, falling back to retrieving numerical enum entries
+  # if the ScalVal cannot map back (ConversionError)
+  def readValue(self):
+    # We probably should not call 'isVisible()' from this thread
+	# hopefully nothing really bad happens. Use because our demo
+	# has a really slow network connection...
+    if self.getWidget().isVisible():
+      self._var.getValAsync()
 
   # restore text to state prior to user starting edit operation
   @QtCore.pyqtSlot()
@@ -515,49 +454,71 @@ class ScalVal(IfObj):
       strVal = "???"
     else:
       # assume they want signed numbers in decimal
-      if self._isFloat or self._val.isSigned() or self._enum or self._string:
+      if self._var.isFloat() or self._var.isSigned() or self._var.getEnumItems() or self._var.isString():
         strVal = '{}'.format( newVal )
       else:
-        w = int((self._val.getSizeBits() + 3)/4) # leading 0x goes into width
+        w = int((self._var.getSizeBits() + 3)/4) # leading 0x goes into width
         strVal = '0x{:0{}x}'.format( newVal, w )
     self.getWidget().setText( strVal )
 
-  # read value, falling back to retrieving numerical enum entries
-  # if the ScalVal cannot map back (ConversionError)
-  def readValue(self):
-    # We probably should not call 'isVisible()' from this thread
-	# hopefully nothing really bad happens. Use because our demo
-	# has a really slow network connection...
-    if self.getWidget().isVisible():
-      self._val.getValAsync( self._cbHelper )
+  # write ScalVal from user text input
+  @QtCore.pyqtSlot()
+  def updateVal(self):
+    self.getWidget().setModified(False)
+    txt = str(self.getWidget().text())
+    if self._var.isString():
+      val  = bytearray(txt, 'ascii')
+      fidx = 0
+      tidx = len(val)
+      slen = len(self._string)
+      if tidx < slen:
+        val.append(0)
+      else:
+        tidx = slen - 1
+    else:
+      if self._var.isFloat():
+        val = float(txt)
+      else:
+        val  = int(txt, 0)
+      fidx = -1
+      tidx = -1
+    self._var.setVal( val, fidx, tidx )
 
-  def callback(self, value):
+  # update widget from changed ScalVal
+  def asyncUpdateWidget(self, value):
 #! Deal with conversion errors by forcing conversion
 #      except pycpsw.ConversionError:
-#        if not self._enum:
+#        if None == self._var.getEnumItems():
 #          raise
-#        v = '{}'.format( self._val.getVal(forceNumeric=True) ) # force Numeric
+#        v = '{}'.format( self._var.getVal(forceNumeric=True) ) # force Numeric
 #        return v 
-    if self._string:
+    if self._var.isString():
       value = bytearray(value).decode('ascii')
     if self._cachedVal != value:
       # send value as a signal - this is properly sent from the 
       # polling thread to the main thread's event loop
-      self._sig.emit(value)
+      if not self.getWidget().isModified():
+        self._sig.emit(value)
       self._cachedVal = value
       self._node._model.setUpdate()
+
 
   # THIS IS EXECUTED BY THE POLLING THREAD
   def __call__(self):
     self.readValue()
 
+class CmdAdapt:
+  def __init__(self, cmd):
+    self._cmd = cmd
+
+  def execute(self):
+    self._cmd.execute()
+
 # Create a push-button for nodes with a cpsw Command interface
 class Cmd(IfObj):
   def __init__(self, path, node, widget_index ):
     IfObj.__init__(self)
-    if path.getNelms() > 1:
-      raise pycpsw.InterfaceNotImplementedError("Arrays of commands not supported")
-    self._cmd = pycpsw.Command.create( path )
+    self._cmd = path.createCmd()
     button    = QtGui.QPushButton("Execute")
     QtCore.QObject.connect(button, QtCore.SIGNAL('clicked(bool)'), self)
     self.setWidget( button )
@@ -580,21 +541,6 @@ class Guard(object):
     self._mtx.unlock()
     return False
     
-# Thread which increments a ScalVal periodically
-class Counter(QtCore.QThread):
-  def __init__(self, model, path, sleepMs):
-    QtCore.QThread.__init__(self)
-    self._val     = pycpsw.ScalVal.create(path)
-    self._model   = model
-    self._sleepMs = sleepMs
-    self.start()
-
-  def run(self):
-    while True:
-      QtCore.QThread.msleep(self._sleepMs)
-      with self._model.getPollGuard():
-        self._val.setVal( self._val.getVal() + 1 )
-
 # Thread which polls all registered callables periodically
 # registration (add) and polling are mutex protected
 class Poller(QtCore.QThread):
@@ -645,7 +591,7 @@ class ChildAdapt:
     return ChildAdapt(c)
 
   def findByName(self, name):
-    return self.entry_.findByName( name )
+    return PathAdapt( self.entry_.findByName( name ) )
 
   def getChildren(self):
     cl = list()
@@ -658,7 +604,77 @@ class ChildAdapt:
 
   def getName(self):
     return self.entry_.getName()
+
+class PathAdapt:
+
+  def __init__(self, p):
+    self._path = p
+
+  # use heuristics to detect an ascii string
+  def guessRepr(self):
+    try:
+      sv = pycpsw.ScalVal_Base.create( self._path )
+    except pycpsw.InterfaceNotImplementedError:
+      return VarAdapt._ReprOther
+    # if the encoding is NONE then getEncoding returns the 'None' object
+    # "NONE" is returned if there is an unknown code
+    if sv.getEncoding() == "NONE":
+        return VarAdapt._ReprOther
+    rval = { "ASCII" : VarAdapt._ReprString, "IEEE_754" : VarAdapt._ReprFloat, "CUSTOM_0" : VarAdapt._ReprInt }.get(sv.getEncoding())
+    if rval == None:
+      rval = { True: VarAdapt._ReprString, False: VarAdapt._ReprInt }.get( StringHeuristics.isString( sv ) )
+    return rval;
+
+  def findByName(self, el):
+    return PathAdapt( self._path.findByName( el ) )
       
+  def createVar(self):
+    readOnly       = False
+
+    representation = self.guessRepr()
+
+    if nelms > 1 and VarAdapt._ReprString != self._string:
+      raise pycpsw.InterfaceNotImplementedError("Non-String arrays (ScalVal) not supported")
+
+    # If the representation is 'Other' then this is certainly not
+    # a ScalVal - but it could still be a DoubleVal.
+    # If the representation is 'Float' then it could be a ScalVal for
+    # which the Float representation was chosen deliberately (in yaml) 
+    if representation in (VarAdapt._ReprOther, VarAdapt._ReprFloat):
+      try:
+        sval     = pycpsw.DoubleVal.create( self._path )
+      except pycpsw.InterfaceNotImplementedError:
+        sval     = pycpsw.DoubleVal_RO.create( self._path )
+        readOnly = True
+    else:
+      try:
+        val      = pycpsw.ScalVal.create( self._path )
+      except pycpsw.InterfaceNotImplementedError:
+        val      = pycpsw.ScalVal_RO.create( self._path )
+        readOnly = True
+
+    return VarAdapt( val, readOnly, representation )
+
+  def createCmd(self):
+    if self._path.getNelms() > 1:
+      raise pycpsw.InterfaceNotImplementedError("Arrays of commands not supported")
+    cmd = pycpsw.Command.create( self._path )
+    return CmdAdapt( cmd )
+
+  def createStream(self):
+    if self._path.getNelms() > 1:
+      raise pycpsw.InterfaceNotImplementedError("Arrays of Streams not supported")
+    if self._path.tail().getName() == "Lcls1TimingStream":
+      raise pycpsw.InterfaceNotImplementedError("Timing Stream Disabled")
+    strm  = pycpsw.Stream.create( self._path )
+    return StreamAdapt( strm )
+
+  def toString(self):
+    return self._path.toString()
+
+  def getNelms(self):
+    return self._path.getNelms()
+
 
 # Adapter to the Model
 class MyNode(object):
@@ -732,11 +748,8 @@ class MyNode(object):
         if nelms > 1:
           # could be a string -- in this case we wouldn't want to expand
           if not childHub:
-            try:
-              if VarAdapt._ReprString == ScalVal.guessRepr( None, path.findByName( child.getName() ) ):
-                leafmax = 0
-            except pycpsw.InterfaceNotImplementedError:
-              pass
+            if VarAdapt._ReprString == path.findByName( child.getName() ).guessRepr():
+              leafmax = 0
           childNames = list()
           if childHub or nelms <= leafmax:
             # Hub- and small leaf- arrays will be expanded
@@ -830,23 +843,42 @@ def test1(index):
     for c in index.internalPointer().getChildren(None):
       print("has child ", c.getNodeName())
 
-class Stream(QtCore.QThread, IfObj):
+class StreamAdapt(QtCore.QThread):
+
+  def __init__(self, strm):
+    QtCore.QThread.__init__(self)
+    self._strm = strm
+    self.start()
+
+  def setWidget(self, widgt):
+    self._widgt = widgt
+
+  def read(self):
+    # divide bytes by sample-size
+    bufsz = int( self._strm.read(self._widgt.getBuf()) / 2 )
+    #print('Got {} items'.format(bufsz))
+    #print(self._widgt.getBuf()[0:20])
+    self._widgt.plot( bufsz )
+
+  def run(self):
+    with self._strm:
+      while True:
+        self.read()
+
+class Stream(IfObj):
 
   _bufs    = []
   _strms   = []
 
   def __init__(self, path, node, widget_index):
-    QtCore.QThread.__init__(self)
     IfObj.__init__(self)
-    if path.getNelms() > 1 or path.tail().getName() == "Lcls1TimingStream":
-      raise pycpsw.InterfaceNotImplementedError("Arrays of Streams not supported")
-    self._strm   = pycpsw.Stream.create(path)
+    self._strm   = path.createStream()
+    self._strm.setWidget( self )
     #self._buf   = array.array('h',range(0,16384))
     self._buf    = np.empty(16384,'int16')
     self._buf.fill(0)
     self._fig    = Figure([2,2])
     self._canvas = FigureCanvas( self._fig )
-    self._bufsz  = 0
     toolbar      = NavigationToolbar( self._canvas, None )
     box          = QtGui.QWidget()
     layout       = QtGui.QVBoxLayout()
@@ -864,35 +896,22 @@ class Stream(QtCore.QThread, IfObj):
     self.setWidget( QtGui.QLabel("") )
     Stream._bufs.append( self._buf )
     Stream._strms.append( self )
-    self.start()
-    self._bufsz = 100
-    self.plot()
+    self.plot( 100 )
     
   def getCanvas(self):
     return self._canvas
 
-  def plot(self):
-    self._axes.cla()
-    self._axes.plot( range(0,self._bufsz), self._buf[0:self._bufsz] )
-    self._canvas.draw()
+  def getBuf(self):
+    return self._buf
 
-  def read(self):
-    # divide bytes by sample-size
-    self._bufsz = int( self._strm.read(self._buf) / 2 )
-    #print('Got {} items'.format(self._bufsz))
-    #print(self._buf[0:20])
-    self.plot()
+  def plot(self, bufsz):
+    self._axes.cla()
+    self._axes.plot( range(0,bufsz), self._buf[0:bufsz] )
+    self._canvas.draw()
 
   def gb(self):
     return self._buf
 
-  def run(self):
-    while True:
-      with self._strm:
-        self.read()
-
-  def getName(self):
-    return self._strm.getName()
 
 class RightPressFilter(QtCore.QObject):
   def __init__(self):
