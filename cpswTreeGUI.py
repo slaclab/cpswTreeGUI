@@ -205,20 +205,40 @@ class ActAction(QtGui.QAction):
     self._signal.connect( slot )
 
 class VarAdapt:
-  def __init__(self, var):
-    self._var = var
+
+  _ReprOther  = 0
+  _ReprInt    = 1
+  _ReprString = 2
+  _ReprFloat  = 3
+
+  def __init__(self, var, readOnly, reprType):
+    self._var       = var
+    self._enumItems = self._var.getEnum()
+    if None != self._enumItems:
+      self._enumItems = self._enumItems.getItems()
+    self._readOnly  = readOnly
+    self._repr      = reprType
 
   def setVal(self, val):
     self._var.setVal( val )
 
+  def isReadOnly(self):
+    return self._readOnly
+
   def getEnumItems(self):
-    return self._var.getEnum().getItems()
+    return self._enumItems
+
+  def getSizeBits(self):
+    return self._var.getSizeBits()
+
+  def isSigned(self):
+    return self._var.isSigned()
 
 class EnumButt(QtGui.QPushButton):
-  def __init__(self, var, readOnly, parent = None):
+  def __init__(self, var, parent = None):
     QtGui.QPushButton.__init__(self, parent)
     self._var = var
-    if not readOnly:
+    if not var.isReadOnly():
       menu          = QtGui.QMenu()
       for item in self._var.getEnumItems():
         a = ActAction( item[0], self )
@@ -236,9 +256,9 @@ class EnumButt(QtGui.QPushButton):
 class ScalValidator(QtGui.QValidator):
   def __init__(self, scalVal, parent=None):
     QtGui.QValidator.__init__(self, parent)
-    nb            = scalVal._val.getSizeBits()
+    nb            = scalVal.getVar().getSizeBits()
     self._scalVal = scalVal
-    if scalVal._val.isSigned():
+    if scalVal.getVar().isSigned():
       self._lo = - (1<<(nb-1))
       self._hi = (1<<(nb-1)) - 1
     else:
@@ -327,78 +347,13 @@ class StringHeuristics:
         pass
     return False
 
-class ScalVal(IfObj):
-
-  _sig = QtCore.pyqtSignal(object)
-
-  _ReprOther  = 0
-  _ReprInt    = 1
-  _ReprString = 2
-  _ReprFloat  = 3
-
-  # use heuristics to detect an ascii string
-  @staticmethod
-  def guessRepr(sv, path):
-    if None == sv:
-      try:
-        sv = pycpsw.ScalVal_Base.create( path )
-      except pycpsw.InterfaceNotImplementedError:
-        return ScalVal._ReprOther
-    # if the encoding is NONE then getEncoding returns the 'None' object
-    # "NONE" is returned if there is an unknown code
-    if sv.getEncoding() == "NONE":
-        return ScalVal._ReprOther
-    rval = { "ASCII" : ScalVal._ReprString, "IEEE_754" : ScalVal._ReprFloat, "CUSTOM_0" : ScalVal._ReprInt }.get(sv.getEncoding())
-    if rval == None:
-      rval = { True: ScalVal._ReprString, False: ScalVal._ReprInt }.get( StringHeuristics.isString( sv ) )
-    return rval;
-
-  def __init__(self, path, node, widget_index ):
+class ScalWidget(IfObj):
+  def __init__(self, var):
     IfObj.__init__(self)
-
-    readOnly       = False
-    self._isFloat  = False
-
-    representation = ScalVal.guessRepr( None, path )
-
-    # If the representation is 'Other' then this is certainly not
-    # a ScalVal - but it could still be a DoubleVal.
-    # If the representation is 'Float' then it could be a ScalVal for
-    # which the Float representation was chosen deliberately (in yaml) 
-    if representation in (ScalVal._ReprOther, ScalVal._ReprFloat):
-      try:
-        self._val = pycpsw.DoubleVal.create( path )
-      except pycpsw.InterfaceNotImplementedError:
-        self._val = pycpsw.DoubleVal_RO.create( path )
-        readOnly  = True
-      self._isFloat = True
-    else:
-      try:
-        self._val    = pycpsw.ScalVal.create( path )
-      except pycpsw.InterfaceNotImplementedError:
-        self._val    = pycpsw.ScalVal_RO.create( path )
-        readOnly     = True
-
-    self._node        = node
-    print('creating ' + path.toString())
-    self._cbHelper = CallbackHelper( self )
-
-    if not self._isFloat and self._val.getEnum() != None:
-      self._enum   = True
-    else:
-      self._enum   = False
-    nelms          = path.getNelms()
-
-    if representation == ScalVal._ReprString:
-      self._string = bytearray(nelms) 
-    else:
-      self._string = None
-
-    if nelms > 1 and None == self._string:
-      raise pycpsw.InterfaceNotImplementedError("Non-String arrays (ScalVal) not supported")
-    
-    if self._enum:
-      widgt       = EnumButt( VarAdapt(self._val), readOnly )
+    self._var = var
+    readOnly  = var.isReadOnly()
+    if None != var.getEnumItems():
+      widgt       = EnumButt( var )
     else:
       widgt       = LineEditWrapper()
       widgt.setReadOnly( readOnly )
@@ -420,6 +375,101 @@ class ScalVal(IfObj):
     self.updateTxt( self._cachedVal )
     node._model.addPoll( self )
     self._sig.connect( self.updateTxt )
+
+
+class ScalVal(IfObj):
+
+  _sig = QtCore.pyqtSignal(object)
+
+  # use heuristics to detect an ascii string
+  @staticmethod
+  def guessRepr(sv, path):
+    if None == sv:
+      try:
+        sv = pycpsw.ScalVal_Base.create( path )
+      except pycpsw.InterfaceNotImplementedError:
+        return VarAdapt._ReprOther
+    # if the encoding is NONE then getEncoding returns the 'None' object
+    # "NONE" is returned if there is an unknown code
+    if sv.getEncoding() == "NONE":
+        return VarAdapt._ReprOther
+    rval = { "ASCII" : VarAdapt._ReprString, "IEEE_754" : VarAdapt._ReprFloat, "CUSTOM_0" : VarAdapt._ReprInt }.get(sv.getEncoding())
+    if rval == None:
+      rval = { True: VarAdapt._ReprString, False: VarAdapt._ReprInt }.get( StringHeuristics.isString( sv ) )
+    return rval;
+
+  def __init__(self, path, node, widget_index ):
+    IfObj.__init__(self)
+
+    readOnly       = False
+    self._isFloat  = False
+
+    representation = ScalVal.guessRepr( None, path )
+
+    # If the representation is 'Other' then this is certainly not
+    # a ScalVal - but it could still be a DoubleVal.
+    # If the representation is 'Float' then it could be a ScalVal for
+    # which the Float representation was chosen deliberately (in yaml) 
+    if representation in (VarAdapt._ReprOther, VarAdapt._ReprFloat):
+      try:
+        self._val = pycpsw.DoubleVal.create( path )
+      except pycpsw.InterfaceNotImplementedError:
+        self._val = pycpsw.DoubleVal_RO.create( path )
+        readOnly  = True
+      self._isFloat = True
+    else:
+      try:
+        self._val    = pycpsw.ScalVal.create( path )
+      except pycpsw.InterfaceNotImplementedError:
+        self._val    = pycpsw.ScalVal_RO.create( path )
+        readOnly     = True
+
+    self._var      = VarAdapt( self._val, readOnly, representation )
+
+    self._node     = node
+    print('creating ' + path.toString())
+    self._cbHelper = CallbackHelper( self )
+
+    if not self._isFloat and self._val.getEnum() != None:
+      self._enum   = True
+    else:
+      self._enum   = False
+    nelms          = path.getNelms()
+
+    if representation == VarAdapt._ReprString:
+      self._string = bytearray(nelms) 
+    else:
+      self._string = None
+
+    if nelms > 1 and None == self._string:
+      raise pycpsw.InterfaceNotImplementedError("Non-String arrays (ScalVal) not supported")
+    
+    if self._enum:
+      widgt       = EnumButt( self.getVar() )
+    else:
+      widgt       = LineEditWrapper()
+      widgt.setReadOnly( readOnly )
+      widgt.setFrame( not readOnly )
+      if not readOnly:
+        if not self._string:
+          if self._isFloat:
+            validator = QtGui.QDoubleValidator()
+          else:
+            validator = ScalValidator( self )
+          widgt.setValidator( validator )
+        # returnPressed is only emitted if the string passes validation
+        QtCore.QObject.connect( widgt, QtCore.SIGNAL("returnPressed()"),   self.updateVal )
+        # editingFinished is emitted after returnPressed or lost focus (with valid string)
+        # if we lose focus w/o return being hit then we restore the original string
+        QtCore.QObject.connect( widgt, QtCore.SIGNAL("editingFinished()"), self.restoreTxt  )
+    self.setWidget(widgt)
+    self._cachedVal = None;
+    self.updateTxt( self._cachedVal )
+    node._model.addPoll( self )
+    self._sig.connect( self.updateTxt )
+
+  def getVar(self):
+    return self._var
 
   def callbackIssuer(self):
     return self._val.getPath().toString()
@@ -683,7 +733,7 @@ class MyNode(object):
           # could be a string -- in this case we wouldn't want to expand
           if not childHub:
             try:
-              if ScalVal._ReprString == ScalVal.guessRepr( None, path.findByName( child.getName() ) ):
+              if VarAdapt._ReprString == ScalVal.guessRepr( None, path.findByName( child.getName() ) ):
                 leafmax = 0
             except pycpsw.InterfaceNotImplementedError:
               pass
