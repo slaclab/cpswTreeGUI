@@ -204,6 +204,10 @@ class ActAction(QtGui.QAction):
   def connect(self, slot):
     self._signal.connect( slot )
 
+class InterfaceNotImplemented(Exception):
+  def __init__(self, args):
+    Exception.__init__(self,args)
+
 class VarAdapt:
 
   _ReprOther  = 0
@@ -309,10 +313,10 @@ class ScalValidator(QtGui.QValidator):
 class IfObj(QtCore.QObject):
   def __init__(self, parent=None):
     QtCore.QObject.__init__(self, parent)
-    
+
   def setWidget(self, widget):
     self._widget = widget
-  
+
   def getWidget(self):
     return self._widget
 
@@ -392,7 +396,7 @@ class ScalVal(IfObj):
     nelms      = path.getNelms()
 
     if self._var.getRepr() == VarAdapt._ReprString:
-      self._string = bytearray(nelms) 
+      self._string = bytearray(nelms)
     else:
       self._string = None
 
@@ -420,7 +424,7 @@ class ScalVal(IfObj):
     self._sig.connect( self.updateTxt )
     if self._var.needPoll():
       node._model.addPoll( self )
-    
+
   def getVar(self):
     return self._var
 
@@ -491,11 +495,11 @@ class ScalVal(IfObj):
 #        if None == self._var.getEnumItems():
 #          raise
 #        v = '{}'.format( self._var.getVal(forceNumeric=True) ) # force Numeric
-#        return v 
+#        return v
     if self._var.isString():
       value = bytearray(value).decode('ascii')
     if self._cachedVal != value:
-      # send value as a signal - this is properly sent from the 
+      # send value as a signal - this is properly sent from the
       # polling thread to the main thread's event loop
       if not self.getWidget().isModified():
         self._sig.emit(value)
@@ -522,7 +526,7 @@ class Cmd(IfObj):
     button    = QtGui.QPushButton("Execute")
     QtCore.QObject.connect(button, QtCore.SIGNAL('clicked(bool)'), self)
     self.setWidget( button )
-  
+
   def __call__(self):
     self._cmd.execute()
     return False
@@ -535,12 +539,12 @@ class Guard(object):
     self._mtx = mutex
 
   def __enter__(self):
-    self._mtx.lock() 
+    self._mtx.lock()
 
   def __exit__(self, exc_type, exc_value, traceback):
     self._mtx.unlock()
     return False
-    
+
 # Thread which polls all registered callables periodically
 # registration (add) and polling are mutex protected
 class Poller(QtCore.QThread):
@@ -627,46 +631,57 @@ class PathAdapt:
 
   def findByName(self, el):
     return PathAdapt( self._path.findByName( el ) )
-      
+
   def createVar(self):
     readOnly       = False
 
-    representation = self.guessRepr()
+    try:
 
-    if self._path.getNelms() > 1 and VarAdapt._ReprString != representation:
-      raise pycpsw.InterfaceNotImplementedError("Non-String arrays (ScalVal) not supported")
+      representation = self.guessRepr()
 
-    # If the representation is 'Other' then this is certainly not
-    # a ScalVal - but it could still be a DoubleVal.
-    # If the representation is 'Float' then it could be a ScalVal for
-    # which the Float representation was chosen deliberately (in yaml) 
-    if representation in (VarAdapt._ReprOther, VarAdapt._ReprFloat):
-      try:
-        sval     = pycpsw.DoubleVal.create( self._path )
-      except pycpsw.InterfaceNotImplementedError:
-        sval     = pycpsw.DoubleVal_RO.create( self._path )
-        readOnly = True
-    else:
-      try:
-        val      = pycpsw.ScalVal.create( self._path )
-      except pycpsw.InterfaceNotImplementedError:
-        val      = pycpsw.ScalVal_RO.create( self._path )
-        readOnly = True
+      if self._path.getNelms() > 1 and VarAdapt._ReprString != representation:
+        raise pycpsw.InterfaceNotImplementedError("Non-String arrays (ScalVal) not supported")
+
+      # If the representation is 'Other' then this is certainly not
+      # a ScalVal - but it could still be a DoubleVal.
+      # If the representation is 'Float' then it could be a ScalVal for
+      # which the Float representation was chosen deliberately (in yaml)
+      if representation in (VarAdapt._ReprOther, VarAdapt._ReprFloat):
+        try:
+          sval     = pycpsw.DoubleVal.create( self._path )
+        except pycpsw.InterfaceNotImplementedError:
+          sval     = pycpsw.DoubleVal_RO.create( self._path )
+          readOnly = True
+      else:
+        try:
+          val      = pycpsw.ScalVal.create( self._path )
+        except pycpsw.InterfaceNotImplementedError:
+          val      = pycpsw.ScalVal_RO.create( self._path )
+          readOnly = True
+
+    except pycpsw.InterfaceNotImplementedError as e:
+      raise InterfaceNotImplemented(e.args)
 
     return VarAdapt( val, readOnly, representation )
 
   def createCmd(self):
-    if self._path.getNelms() > 1:
-      raise pycpsw.InterfaceNotImplementedError("Arrays of commands not supported")
-    cmd = pycpsw.Command.create( self._path )
+    try:
+      if self._path.getNelms() > 1:
+        raise pycpsw.InterfaceNotImplementedError("Arrays of commands not supported")
+      cmd = pycpsw.Command.create( self._path )
+    except pycpsw.InterfaceNotImplementedError as e:
+      raise InterfaceNotImplemented(e.args)
     return CmdAdapt( cmd )
 
   def createStream(self):
-    if self._path.getNelms() > 1:
-      raise pycpsw.InterfaceNotImplementedError("Arrays of Streams not supported")
-    if self._path.tail().getName() == "Lcls1TimingStream":
-      raise pycpsw.InterfaceNotImplementedError("Timing Stream Disabled")
-    strm  = pycpsw.Stream.create( self._path )
+    try:
+      if self._path.getNelms() > 1:
+        raise pycpsw.InterfaceNotImplementedError("Arrays of Streams not supported")
+      if self._path.tail().getName() == "Lcls1TimingStream":
+        raise pycpsw.InterfaceNotImplementedError("Timing Stream Disabled")
+      strm  = pycpsw.Stream.create( self._path )
+    except pycpsw.InterfaceNotImplementedError as e:
+      raise InterfaceNotImplemented(e.args)
     return StreamAdapt( strm )
 
   def toString(self):
@@ -739,7 +754,7 @@ class MyNode(object):
     if None != self._hub:
       row  = 0
       # for all children
-      path = self.buildPath() 
+      path = self.buildPath()
       for child in self._hub.getChildren():
         childHub = child.isHub()
         nelms    = child.getNelms()
@@ -773,7 +788,7 @@ class MyNode(object):
           if None == childHub:
             widget_index = self._model.index(row - 1, 1, mindex)
             childPath    = path.findByName( childName )
-            # Check 
+            # Check
             IFs = [ ScalVal, Cmd, Stream ]
             for IF in IFs:
               try:
@@ -781,7 +796,7 @@ class MyNode(object):
                 widgt = ifObj.getWidget()
                 childNode.setIfObj( ifObj )
                 break
-              except pycpsw.InterfaceNotImplementedError:
+              except InterfaceNotImplemented:
                 pass
             else:
               if nelms > 1:
@@ -897,7 +912,7 @@ class Stream(IfObj):
     Stream._bufs.append( self._buf )
     Stream._strms.append( self )
     self.plot( 100 )
-    
+
   def getCanvas(self):
     return self._canvas
 
