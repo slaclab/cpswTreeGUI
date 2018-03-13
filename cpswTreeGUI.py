@@ -30,7 +30,7 @@ class MyModel(QtCore.QAbstractItemModel):
     QtCore.QAbstractItemModel.__init__(self)
     self._poller    = Poller(1000)
     self._col0Width = 0
-    self._root      = MyNode(self, rootPath.origin())
+    self._root      = MyNode(self, ChildAdapt(rootPath.origin()) )
 
     self._tree      = QtGui.QTreeView()
     QtCore.QObject.connect( self._poller, QtCore.SIGNAL("_signl()"), self.update )
@@ -204,20 +204,30 @@ class ActAction(QtGui.QAction):
   def connect(self, slot):
     self._signal.connect( slot )
 
+class VarAdapt:
+  def __init__(self, var):
+    self._var = var
+
+  def setVal(self, val):
+    self._var.setVal( val )
+
+  def getEnumItems(self):
+    return self._var.getEnum().getItems()
+
 class EnumButt(QtGui.QPushButton):
-  def __init__(self, scalVal, readOnly, parent = None):
+  def __init__(self, var, readOnly, parent = None):
     QtGui.QPushButton.__init__(self, parent)
-    self._scalVal = scalVal
+    self._var = var
     if not readOnly:
       menu          = QtGui.QMenu()
-      for item in self._scalVal.getEnum().getItems():
+      for item in self._var.getEnumItems():
         a = ActAction( item[0], self )
         a.connect( self.activated )
         menu.addAction( a )
       self.setMenu( menu )
 
   def activated(self, act):
-    self._scalVal.setVal( str(act.text()) )
+    self._var.setVal( str(act.text()) )
 
   def isModified(self):
     return False
@@ -373,10 +383,10 @@ class ScalVal(IfObj):
     print('creating ' + path.toString())
     self._cbHelper = CallbackHelper( self )
 
-    if not self._isFloat:
-      self._enum   = self._val.getEnum()
+    if not self._isFloat and self._val.getEnum() != None:
+      self._enum   = True
     else:
-      self._enum   = None
+      self._enum   = False
     nelms          = path.getNelms()
 
     if representation == ScalVal._ReprString:
@@ -388,7 +398,7 @@ class ScalVal(IfObj):
       raise pycpsw.InterfaceNotImplementedError("Non-String arrays (ScalVal) not supported")
     
     if self._enum:
-      widgt       = EnumButt( self._val, readOnly )
+      widgt       = EnumButt( VarAdapt(self._val), readOnly )
     else:
       widgt       = LineEditWrapper()
       widgt.setReadOnly( readOnly )
@@ -570,6 +580,34 @@ class Poller(QtCore.QThread):
 
   def getGuard(self):
     return Guard(self._mtx)
+
+class ChildAdapt:
+  def __init__(self, entry):
+    self.entry_ = entry
+
+  def getDescription(self):
+    return self.entry_.getDescription()
+
+  def isHub(self):
+    c = self.entry_.isHub()
+    if c == None:
+      return c
+    return ChildAdapt(c)
+
+  def findByName(self, name):
+    return self.entry_.findByName( name )
+
+  def getChildren(self):
+    cl = list()
+    for c in self.entry_.getChildren():
+      cl.append( ChildAdapt( c ) )
+    return cl
+
+  def getNelms(self):
+    return self.entry_.getNelms()
+
+  def getName(self):
+    return self.entry_.getName()
       
 
 # Adapter to the Model
@@ -596,15 +634,6 @@ class MyNode(object):
 
   def __getChildren(self, mindex):
     return self._children
-
-  def __buildPath(self, node, p):
-    parent = node.parent()
-    if parent:
-      self.__buildPath(parent, p)
-    else:
-      # must be the root
-      p = pycpsw.Path.create(self._child)
-    p.findByName(self.getNodeName())
 
   def getNodeName(self):
     return self._name
@@ -759,7 +788,7 @@ class Stream(QtCore.QThread, IfObj):
   def __init__(self, path, node, widget_index):
     QtCore.QThread.__init__(self)
     IfObj.__init__(self)
-    if path.getNelms() > 1:
+    if path.getNelms() > 1 or path.tail().getName() == "Lcls1TimingStream":
       raise pycpsw.InterfaceNotImplementedError("Arrays of Streams not supported")
     self._strm   = pycpsw.Stream.create(path)
     #self._buf   = array.array('h',range(0,16384))
