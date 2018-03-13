@@ -633,7 +633,7 @@ class PathAdapt:
 
     representation = self.guessRepr()
 
-    if nelms > 1 and VarAdapt._ReprString != self._string:
+    if self._path.getNelms() > 1 and VarAdapt._ReprString != representation:
       raise pycpsw.InterfaceNotImplementedError("Non-String arrays (ScalVal) not supported")
 
     # If the representation is 'Other' then this is certainly not
