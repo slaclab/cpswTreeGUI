@@ -7,7 +7,6 @@ import re
 import sip
 sip.setapi('QString', 2)
 from   PyQt4                              import QtCore, QtGui
-import pycpsw
 import yaml_cpp
 import signal
 import array
@@ -19,6 +18,7 @@ from   matplotlib.backends.backend_qt4agg import FigureCanvasQTAgg    as FigureC
 from   matplotlib.backends.backend_qt4agg import NavigationToolbar2QT as NavigationToolbar
 import fixupYaml
 
+from   cpswTreeGUICommon import InterfaceNotImplemented
 
 class MyModel(QtCore.QAbstractItemModel):
 
@@ -79,7 +79,7 @@ class MyModel(QtCore.QAbstractItemModel):
             ret = msg.exec_()
             if ret == QtGui.QMessageBox.No:
                 return
-            pycpsw.Path.loadConfigFromYamlFile(path, yaml_file)
+            path.loadConfigFromYamlFile(yaml_file)
         except Exception as ex:
             print("Error while loading config from YAML file.")
             print("Exception: ", ex)
@@ -204,66 +204,6 @@ class ActAction(QtGui.QAction):
   def connect(self, slot):
     self._signal.connect( slot )
 
-class InterfaceNotImplemented(Exception):
-  def __init__(self, args):
-    Exception.__init__(self,args)
-
-class VarAdapt:
-
-  _ReprOther  = 0
-  _ReprInt    = 1
-  _ReprString = 2
-  _ReprFloat  = 3
-
-  def __init__(self, var, readOnly, reprType):
-    self._var       = var
-    self._enumItems = self._var.getEnum()
-    if None != self._enumItems:
-      self._enumItems = self._enumItems.getItems()
-    self._readOnly  = readOnly
-    self._repr      = reprType
-    self._cbHelper  = CallbackHelper( self )
-
-  def setVal(self, val, fromIdx = -1, toIdx = -1):
-    self._var.setVal( val, fromIdx=fromIdx, toIdx=toIdx )
-
-  def setWidget(self, widgt):
-    self._widgt     = widgt
-
-  def getValAsync(self):
-    self._var.getValAsync( self._cbHelper )
-
-  def isReadOnly(self):
-    return self._readOnly
-
-  def getEnumItems(self):
-    return self._enumItems
-
-  def getSizeBits(self):
-    return self._var.getSizeBits()
-
-  def isSigned(self):
-    return self._var.isSigned()
-
-  def getRepr(self):
-    return self._repr
-
-  def isFloat(self):
-    return self.getRepr() == VarAdapt._ReprFloat
-
-  def isString(self):
-    return self.getRepr() == VarAdapt._ReprString
-
-  def toString(self):
-    return self._var.getPath().toString()
-
-  # Called by Async IO Completion
-  def callback(self, value):
-    self._widgt.asyncUpdateWidget( value )
-
-  def needPoll(self):
-    return True
-
 class EnumButt(QtGui.QPushButton):
   def __init__(self, var, parent = None):
     QtGui.QPushButton.__init__(self, parent)
@@ -313,12 +253,18 @@ class ScalValidator(QtGui.QValidator):
 class IfObj(QtCore.QObject):
   def __init__(self, parent=None):
     QtCore.QObject.__init__(self, parent)
+    self._widget = None
 
   def setWidget(self, widget):
     self._widget = widget
 
   def getWidget(self):
     return self._widget
+
+  def getDescription(self):
+    if None == self._widget:
+      return None
+    return self._widget.getDescription()
 
 class LineEditWrapper(QtGui.QLineEdit):
   def __init__(self, parent=None):
@@ -327,56 +273,6 @@ class LineEditWrapper(QtGui.QLineEdit):
   def setText(self, txt):
     QtGui.QLineEdit.setText(self, txt)
     self.home( False )
-
-class CallbackHelper(pycpsw.AsyncIO):
-  def __init__(self, real_callback):
-    pycpsw.AsyncIO.__init__(self)
-    self._real_callback = real_callback
-
-  def callback(self, arg):
-    try:
-      if None != arg:
-        self._real_callback.callback(arg)
-      else:
-        print("Error in callback -- Issuer:")
-        print(self._real_callback.callbackIssuer())
-  #      sys.exit(1)
-    except:
-      print("Exception in callback -- Issuer:{}".format( self._real_callback.callbackIssuer() ) )
-      print("Exception Info {}".format(sys.exc_info()[0]))
-      print("Callback arg: {}".format(arg))
-      sys.exit(1)
-
-class StringHeuristics:
-  def __init__(self):
-    raise RuntimeError("This class cannot instantiate objects")
-
-  _enabled = True
-
-  @staticmethod
-  def enable():
-    StringHeuristics._enabled = True
-
-  def disable():
-    StringHeuristics._enabled = False
-
-  @staticmethod
-  def isString( svb ):
-    if not StringHeuristics._enabled:
-      print("DISA")
-      return False
-    if svb.getNelms() > 1 and not svb.getEnum() and 8 == svb.getSizeBits():
-      try:
-        # there is some really slow I/O out there; limit number of chars
-        sv = pycpsw.ScalVal_RO.create( svb.getPath() )
-        to = svb.getNelms()
-        if to > 20:
-          to = 20
-        bytearray(sv.getVal(fromIdx=0, toIdx=to)).decode('ascii')
-        return True
-      except:
-        pass
-    return False
 
 class ScalVal(IfObj):
 
@@ -389,7 +285,6 @@ class ScalVal(IfObj):
 
     self._var  = path.createVar()
 
-    self._var.setWidget( self )
 
     self._node = node
     readOnly   = self._var.isReadOnly()
@@ -424,9 +319,13 @@ class ScalVal(IfObj):
     self._sig.connect( self.updateTxt )
     if self._var.needPoll():
       node._model.addPoll( self )
+    self._var.setWidget( self )
 
   def getVar(self):
     return self._var
+
+  def getDescription(self):
+    return self.getVar().getDescription()
 
   def callbackIssuer(self):
     return self._var.toString()
@@ -511,13 +410,6 @@ class ScalVal(IfObj):
   def __call__(self):
     self.readValue()
 
-class CmdAdapt:
-  def __init__(self, cmd):
-    self._cmd = cmd
-
-  def execute(self):
-    self._cmd.execute()
-
 # Create a push-button for nodes with a cpsw Command interface
 class Cmd(IfObj):
   def __init__(self, path, node, widget_index ):
@@ -530,6 +422,9 @@ class Cmd(IfObj):
   def __call__(self):
     self._cmd.execute()
     return False
+
+  def getDescription(self):
+    return self._cmd.getDescription()
 
 # Mutex guard (QMutexLocker is not useful since lifetime of python
 # object does not necessarily end when it goes out of scope)
@@ -581,116 +476,6 @@ class Poller(QtCore.QThread):
   def getGuard(self):
     return Guard(self._mtx)
 
-class ChildAdapt:
-  def __init__(self, entry):
-    self.entry_ = entry
-
-  def getDescription(self):
-    return self.entry_.getDescription()
-
-  def isHub(self):
-    c = self.entry_.isHub()
-    if c == None:
-      return c
-    return ChildAdapt(c)
-
-  def findByName(self, name):
-    return PathAdapt( self.entry_.findByName( name ) )
-
-  def getChildren(self):
-    cl = list()
-    for c in self.entry_.getChildren():
-      cl.append( ChildAdapt( c ) )
-    return cl
-
-  def getNelms(self):
-    return self.entry_.getNelms()
-
-  def getName(self):
-    return self.entry_.getName()
-
-class PathAdapt:
-
-  def __init__(self, p):
-    self._path = p
-
-  # use heuristics to detect an ascii string
-  def guessRepr(self):
-    try:
-      sv = pycpsw.ScalVal_Base.create( self._path )
-    except pycpsw.InterfaceNotImplementedError:
-      return VarAdapt._ReprOther
-    # if the encoding is NONE then getEncoding returns the 'None' object
-    # "NONE" is returned if there is an unknown code
-    if sv.getEncoding() == "NONE":
-        return VarAdapt._ReprOther
-    rval = { "ASCII" : VarAdapt._ReprString, "IEEE_754" : VarAdapt._ReprFloat, "CUSTOM_0" : VarAdapt._ReprInt }.get(sv.getEncoding())
-    if rval == None:
-      rval = { True: VarAdapt._ReprString, False: VarAdapt._ReprInt }.get( StringHeuristics.isString( sv ) )
-    return rval;
-
-  def findByName(self, el):
-    return PathAdapt( self._path.findByName( el ) )
-
-  def createVar(self):
-    readOnly       = False
-
-    try:
-
-      representation = self.guessRepr()
-
-      if self._path.getNelms() > 1 and VarAdapt._ReprString != representation:
-        raise pycpsw.InterfaceNotImplementedError("Non-String arrays (ScalVal) not supported")
-
-      # If the representation is 'Other' then this is certainly not
-      # a ScalVal - but it could still be a DoubleVal.
-      # If the representation is 'Float' then it could be a ScalVal for
-      # which the Float representation was chosen deliberately (in yaml)
-      if representation in (VarAdapt._ReprOther, VarAdapt._ReprFloat):
-        try:
-          sval     = pycpsw.DoubleVal.create( self._path )
-        except pycpsw.InterfaceNotImplementedError:
-          sval     = pycpsw.DoubleVal_RO.create( self._path )
-          readOnly = True
-      else:
-        try:
-          val      = pycpsw.ScalVal.create( self._path )
-        except pycpsw.InterfaceNotImplementedError:
-          val      = pycpsw.ScalVal_RO.create( self._path )
-          readOnly = True
-
-    except pycpsw.InterfaceNotImplementedError as e:
-      raise InterfaceNotImplemented(e.args)
-
-    return VarAdapt( val, readOnly, representation )
-
-  def createCmd(self):
-    try:
-      if self._path.getNelms() > 1:
-        raise pycpsw.InterfaceNotImplementedError("Arrays of commands not supported")
-      cmd = pycpsw.Command.create( self._path )
-    except pycpsw.InterfaceNotImplementedError as e:
-      raise InterfaceNotImplemented(e.args)
-    return CmdAdapt( cmd )
-
-  def createStream(self):
-    try:
-      if self._path.getNelms() > 1:
-        raise pycpsw.InterfaceNotImplementedError("Arrays of Streams not supported")
-      if self._path.tail().getName() == "Lcls1TimingStream":
-        raise pycpsw.InterfaceNotImplementedError("Timing Stream Disabled")
-      strm  = pycpsw.Stream.create( self._path )
-    except pycpsw.InterfaceNotImplementedError as e:
-      raise InterfaceNotImplemented(e.args)
-    return StreamAdapt( strm )
-
-  def toString(self):
-    return self._path.toString()
-
-  def getNelms(self):
-    return self._path.getNelms()
-
-
 # Adapter to the Model
 class MyNode(object):
   def __init__(self, model, child, name = None, row = 0, parent = None):
@@ -700,8 +485,9 @@ class MyNode(object):
     self._child    = child
     if not name:
       name = child.getName()
+    print("Making node with name ", name)
     self._name     = name
-    self._desc     = child.getDescription()
+    self._desc     = None
     self._hub      = child.isHub()
     self._row      = row
     self._parent   = parent
@@ -729,12 +515,22 @@ class MyNode(object):
     l = list()
     n = self
     p = n.parent()
+    print("buildPath")
     while None != p:
+      print("haveParent")
       l.insert(0, n.getNodeName())
       n = p
       p = p.parent()
     pnam = '/'.join(l)
+    if None == pnam:
+    	print("buildPath pnam NONE")
+    else:
+    	print("buildPath pnam", pnam)
     path = n._child.findByName( pnam )
+    if None == path:
+      print("buildPath path NONE")
+    else:
+      print("buildPath path", path.toString())
     return path
 
   def addChild(self, child):
@@ -826,6 +622,13 @@ class MyNode(object):
         #  use index widgets to display
         return None
     elif col == 2:
+        if None == self._desc:
+          if None == self._ifObj:
+            self._desc = self.getChild().getStaticDescription()
+          else:
+            self._desc = self._ifObj.getDescription()
+        if None == self._desc:
+          return "" #Not yet known
         return self._desc
     else:
         return None
@@ -858,28 +661,6 @@ def test1(index):
     for c in index.internalPointer().getChildren(None):
       print("has child ", c.getNodeName())
 
-class StreamAdapt(QtCore.QThread):
-
-  def __init__(self, strm):
-    QtCore.QThread.__init__(self)
-    self._strm = strm
-    self.start()
-
-  def setWidget(self, widgt):
-    self._widgt = widgt
-
-  def read(self):
-    # divide bytes by sample-size
-    bufsz = int( self._strm.read(self._widgt.getBuf()) / 2 )
-    #print('Got {} items'.format(bufsz))
-    #print(self._widgt.getBuf()[0:20])
-    self._widgt.plot( bufsz )
-
-  def run(self):
-    with self._strm:
-      while True:
-        self.read()
-
 class Stream(IfObj):
 
   _bufs    = []
@@ -888,7 +669,6 @@ class Stream(IfObj):
   def __init__(self, path, node, widget_index):
     IfObj.__init__(self)
     self._strm   = path.createStream()
-    self._strm.setWidget( self )
     #self._buf   = array.array('h',range(0,16384))
     self._buf    = np.empty(16384,'int16')
     self._buf.fill(0)
@@ -912,6 +692,7 @@ class Stream(IfObj):
     Stream._bufs.append( self._buf )
     Stream._strms.append( self )
     self.plot( 100 )
+    self._strm.setWidget( self )
 
   def getCanvas(self):
     return self._canvas
@@ -927,6 +708,8 @@ class Stream(IfObj):
   def gb(self):
     return self._buf
 
+  def getDescription(self):
+    return self._strm.getDescription()
 
 class RightPressFilter(QtCore.QObject):
   def __init__(self):
@@ -950,6 +733,7 @@ def main1(oargs):
   portMaps      = []
   backDoor      = False
   strHeuristic  = True
+  useEpics      = False
 
   ( opts, args ) = getopt.getopt(
                       oargs[1:],
@@ -960,7 +744,12 @@ def main1(oargs):
                        "tcp",
                        "mapPort=",
                        "ipAddress=",
+                       "useEpics",
                        "help"] )
+
+  for opt in opts:
+    if opt[0] in ('--useEpics'):
+      useEpics = True
 
   for opt in opts:
     if   opt[0] in ('-a', '--ipAddress'):
@@ -979,37 +768,49 @@ def main1(oargs):
         raise RuntimeError('--mapPort option requires <fromPort>:<toPort> argument')
       portMaps.append( [ int(num) for num in opta ] )
     elif opt[0] in ('-h', '--help'):
-      print("Usage: {} [-a <ip_addr>] [-TsBh] [--<long-opt>] yaml_file [root_node [inc_dir_path]]".format(oargs[0]))
-      print()
-      print("          -a <ip_addr>         : patch IP address in YAML")
-      print("          -B                   : see '--backdoor' -- EXPERT USE ONLY")
-      print("          -T                   : use TCP transport (requires rssi bridge connection)")
-      print("          -s                   : disable all streams")
-      print("          -h                   : this message")
-      print()
-      print("          yaml_file            : top-level YAML file to load (required)")
-      print("          root_node            : YAML root node (default: \"root\")")
-      print("          inc_dir_path         : directory where to look for included YAML files")
-      print("                                 default: directory where 'yaml_file' is located")
-      print()
-      print("  Long Options                 :")
-      print("      --ipAddress <addr>       : same as -a")
-      print("      --tcp                    : same as -T")
-      print("      --help                   : same as -h")
-      print("      --no-streams             : same as -s")
-      print("      --mapPort <f>:<t>        : patch UDP/TCP port '<f>' to port '<t>' in YAML")
-      print("                                 i.e., if a port is 'f' in YAML then change it")
-      print("                                 to 't'")
-      print("      --no-string-heuristics   : disable some tests which guess if a value is a")
-      print("                                 string. Some slow devices may take a long time")
-      print("                                 to respond. If this annoys you try this option.")
-      print("      --backdoor               : patch YAML for \"backdoor\" access; implies '-s' and")
-      print("                                 many features are altered: no RSSI/depacketizer/TDESTMux,")
-      print("                                 SRP protocol is altered to V2 and only one port is enabled.")
-      print("                                 By default this is port 8193 if --tcp is given and 8192")
-      print("                                 otherwise. You still need to specify --tcp when using")
-      print("                                 the rssi_bridge. If you need a non-standard port then")
-      print("                                 use '--mapPort'")
+      if not useEpics:
+        print("Usage: {} [-a <ip_addr>] [-TsBh] [--<long-opt>] yaml_file [root_node [inc_dir_path]]".format(oargs[0]))
+        print()
+        print("          -a <ip_addr>         : patch IP address in YAML")
+        print("          -B                   : see '--backdoor' -- EXPERT USE ONLY")
+        print("          -T                   : use TCP transport (requires rssi bridge connection)")
+        print("          -s                   : disable all streams")
+        print("          -h                   : this message")
+        print()
+        print("          yaml_file            : top-level YAML file to load (required)")
+        print("          root_node            : YAML root node (default: \"root\")")
+        print("          inc_dir_path         : directory where to look for included YAML files")
+        print("                                 default: directory where 'yaml_file' is located")
+        print()
+        print("  Long Options                 :")
+        print("      --ipAddress <addr>       : same as -a")
+        print("      --tcp                    : same as -T")
+        print("      --help                   : same as -h")
+        print("      --no-streams             : same as -s")
+        print("      --mapPort <f>:<t>        : patch UDP/TCP port '<f>' to port '<t>' in YAML")
+        print("                                 i.e., if a port is 'f' in YAML then change it")
+        print("                                 to 't'")
+        print("      --no-string-heuristics   : disable some tests which guess if a value is a")
+        print("                                 string. Some slow devices may take a long time")
+        print("                                 to respond. If this annoys you try this option.")
+        print("      --backdoor               : patch YAML for \"backdoor\" access; implies '-s' and")
+        print("                                 many features are altered: no RSSI/depacketizer/TDESTMux,")
+        print("                                 SRP protocol is altered to V2 and only one port is enabled.")
+        print("                                 By default this is port 8193 if --tcp is given and 8192")
+        print("                                 otherwise. You still need to specify --tcp when using")
+        print("                                 the rssi_bridge. If you need a non-standard port then")
+        print("                                 use '--mapPort'")
+        print("      --useEpics               : Use EPICS CA to connect; more info with --help --useEpics")
+      else:
+        print("Usage: {} --useEpics [--help] yaml_file [root_node]".format(oargs[0]))
+        print()
+        print("                               : Use EPICS CA to connect instead of CPSW. A proper IOC must")
+        print("                                 be running; most-likely it is an IOC running YCPSWASYN.")
+        print("                                 Such an IOC produces a dump of the device hierarchy from")
+        print("                                 which hashed PV names can be computed. This hierarchy is")
+        print("                                 in YAML format (but different from the CPSW YAML file).")
+        print("                                 Use this YAML file to build the GUI.")
+
       return
 
   if not strHeuristic:
@@ -1030,7 +831,10 @@ def main1(oargs):
   if len(args) > 0:
     yamlFile = args[0]
   else:
-    print("usage: {} <yaml_file> [yaml_root_node_name='root' [yaml_inc_dir=''] ]".format(oargs[0]))
+    if useEpics:
+      print("usage: {} [options] <yaml_file> [yaml_root_node_name='root' ]".format(oargs[0]))
+    else:
+      print("usage: {} [options] <yaml_file> [yaml_root_node_name='root' [yaml_inc_dir=''] ]".format(oargs[0]))
     sys.exit(1)
   if len(args) > 1:
     yamlRoot = args[1]
@@ -1040,20 +844,34 @@ def main1(oargs):
     yamlIncDir = args[2]
   else:
     yamlIncDir = None
-  fixYaml       = fixupYaml.Fixup(
-                    useTcp        = useTcp,
-                    srpV2         = srpV2,
-                    noStreams     = noStreams,
-                    ipAddr        = ipAddr,
-                    disableDepack = disableDepack,
-                    portMaps      = portMaps
-                  )
+
+  if not useEpics:
+    fixYaml       = fixupYaml.Fixup(
+                      useTcp        = useTcp,
+                      srpV2         = srpV2,
+                      noStreams     = noStreams,
+                      ipAddr        = ipAddr,
+                      disableDepack = disableDepack,
+                      portMaps      = portMaps
+                    )
+  else:
+    fixYaml    = None
+    yamlIncDir = None
   app      = QtGui.QApplication(args)
-  modl, rp = startGUI(yamlFile, yamlRoot, fixYaml, yamlIncDir)
+  modl, rp = startGUI(yamlFile, yamlRoot, fixYaml, yamlIncDir, useEpics)
   return (modl, app, rp)
 
-def startGUI(yamlFile, yamlRoot, fixYaml=None, yamlIncDir=None):
-  rp = pycpsw.Path.loadYamlFile(
+def startGUI(yamlFile, yamlRoot, fixYaml=None, yamlIncDir=None, useEpics=False):
+  if useEpics:
+    from   caAdapt   import VarAdapt, CmdAdapt, StreamAdapt, PathAdapt, ChildAdapt
+  else:
+    from   cpswAdapt import VarAdapt, CmdAdapt, StreamAdapt, PathAdapt, ChildAdapt
+  global VarAdapt
+  global CmdAdapt
+  global StreamAdapt
+  global PathAdapt
+  global ChildAdapt
+  rp = PathAdapt.loadYamlFile(
               yamlFile,
               yamlRoot,
               yamlIncDir,
