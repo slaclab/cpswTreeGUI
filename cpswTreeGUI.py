@@ -22,12 +22,13 @@ from   cpswTreeGUICommon import InterfaceNotImplemented
 
 class MyModel(QtCore.QAbstractItemModel):
 
-  def __init__(self, rootPath):
+  def __init__(self, rootPath, useEpics):
     self._app = QtCore.QCoreApplication.instance()
     if not self._app:
       self._app = QtGui.QApplication([])
 
     QtCore.QAbstractItemModel.__init__(self)
+    self._useEpics  = useEpics
     self._poller    = Poller(1000)
     self._col0Width = 0
     self._root      = MyNode(self, ChildAdapt(rootPath.origin()) )
@@ -42,9 +43,10 @@ class MyModel(QtCore.QAbstractItemModel):
     # Context Menu for Tree View
     self._tree.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
     self._treeMenu = QtGui.QMenu()
-    loadAction = QtGui.QAction("Load from file...", self)
-    loadAction.triggered.connect(self.loadFromFile)
-    self._treeMenu.addAction(loadAction)
+    if not self._useEpics:
+      loadAction = QtGui.QAction("Load from file...", self)
+      loadAction.triggered.connect(self.loadFromFile)
+      self._treeMenu.addAction(loadAction)
     pathAction = QtGui.QAction("Copy 'Path' to clipboard...", self)
     pathAction.triggered.connect(self.copyPathToClipboard)
     self._treeMenu.addAction(pathAction)
@@ -86,8 +88,7 @@ class MyModel(QtCore.QAbstractItemModel):
 
   def copyPathToClipboard(self):
     my_node = self._tree.selectedIndexes()[0].internalPointer()
-    path = my_node.buildPath()
-    QtGui.QApplication.clipboard().setText( path.toString() )
+    QtGui.QApplication.clipboard().setText( my_node.getConnectionName() )
 
   def setCol0Width(self, width):
     self._col0Width = width
@@ -251,9 +252,10 @@ class ScalValidator(QtGui.QValidator):
     self._scalWid.restoreTxt()
 
 class IfObj(QtCore.QObject):
-  def __init__(self, parent=None):
+  def __init__(self, commHdl, parent=None):
     QtCore.QObject.__init__(self, parent)
-    self._widget = None
+    self._widget  = None
+    self._commHdl = commHdl
 
   def setWidget(self, widget):
     self._widget = widget
@@ -261,10 +263,14 @@ class IfObj(QtCore.QObject):
   def getWidget(self):
     return self._widget
 
+  def commHdl(self):
+    return self._commHdl;
+
   def getDescription(self):
-    if None == self._widget:
-      return None
-    return self._widget.getDescription()
+    return self._commHdl.getDescription()
+
+  def getConnectionName(self):
+    return self._commHdl.getConnectionName()
 
 class LineEditWrapper(QtGui.QLineEdit):
   def __init__(self, parent=None):
@@ -279,31 +285,26 @@ class ScalVal(IfObj):
   _sig = QtCore.pyqtSignal(object)
 
   def __init__(self, path, node, widget_index ):
-    IfObj.__init__(self)
-
-    print('creating ' + path.toString())
-
-    self._var  = path.createVar()
-
+    IfObj.__init__(self, path.createVar())
 
     self._node = node
-    readOnly   = self._var.isReadOnly()
+    readOnly   = self.commHdl().isReadOnly()
     nelms      = path.getNelms()
 
-    if self._var.getRepr() == VarAdapt._ReprString:
+    if self.commHdl().getRepr() == VarAdapt._ReprString:
       self._string = bytearray(nelms)
     else:
       self._string = None
 
-    if None != self._var.getEnumItems():
-      widgt       = EnumButt( self._var )
+    if None != self.commHdl().getEnumItems():
+      widgt       = EnumButt( self.commHdl() )
     else:
       widgt       = LineEditWrapper()
       widgt.setReadOnly( readOnly )
       widgt.setFrame( not readOnly )
       if not readOnly:
-        if not self._var.isString():
-          if self._var.isFloat():
+        if not self.commHdl().isString():
+          if self.commHdl().isFloat():
             validator = QtGui.QDoubleValidator()
           else:
             validator = ScalValidator( self )
@@ -317,18 +318,15 @@ class ScalVal(IfObj):
     self._cachedVal = None;
     self.updateTxt( self._cachedVal )
     self._sig.connect( self.updateTxt )
-    if self._var.needPoll():
+    if self.commHdl().needPoll():
       node._model.addPoll( self )
-    self._var.setWidget( self )
+    self.commHdl().setWidget( self )
 
   def getVar(self):
-    return self._var
-
-  def getDescription(self):
-    return self.getVar().getDescription()
+    return self.commHdl()
 
   def callbackIssuer(self):
-    return self._var.toString()
+    return self.commHdl().toString()
 
   # read value, falling back to retrieving numerical enum entries
   # if the ScalVal cannot map back (ConversionError)
@@ -337,7 +335,7 @@ class ScalVal(IfObj):
 	# hopefully nothing really bad happens. Use because our demo
 	# has a really slow network connection...
     if self.getWidget().isVisible():
-      self._var.getValAsync()
+      self.commHdl().getValAsync()
 
   # restore text to state prior to user starting edit operation
   @QtCore.pyqtSlot()
@@ -357,10 +355,10 @@ class ScalVal(IfObj):
       strVal = "???"
     else:
       # assume they want signed numbers in decimal
-      if self._var.isFloat() or self._var.isSigned() or self._var.getEnumItems() or self._var.isString():
+      if self.commHdl().isFloat() or self.commHdl().isSigned() or self.commHdl().getEnumItems() or self.commHdl().isString():
         strVal = '{}'.format( newVal )
       else:
-        w = int((self._var.getSizeBits() + 3)/4) # leading 0x goes into width
+        w = int((self.commHdl().getSizeBits() + 3)/4) # leading 0x goes into width
         strVal = '0x{:0{}x}'.format( newVal, w )
     self.getWidget().setText( strVal )
 
@@ -369,7 +367,7 @@ class ScalVal(IfObj):
   def updateVal(self):
     self.getWidget().setModified(False)
     txt = str(self.getWidget().text())
-    if self._var.isString():
+    if self.commHdl().isString():
       val  = bytearray(txt, 'ascii')
       fidx = 0
       tidx = len(val)
@@ -379,23 +377,23 @@ class ScalVal(IfObj):
       else:
         tidx = slen - 1
     else:
-      if self._var.isFloat():
+      if self.commHdl().isFloat():
         val = float(txt)
       else:
         val  = int(txt, 0)
       fidx = -1
       tidx = -1
-    self._var.setVal( val, fidx, tidx )
+    self.commHdl().setVal( val, fidx, tidx )
 
   # update widget from changed ScalVal
   def asyncUpdateWidget(self, value):
 #! Deal with conversion errors by forcing conversion
 #      except pycpsw.ConversionError:
-#        if None == self._var.getEnumItems():
+#        if None == self.commHdl().getEnumItems():
 #          raise
-#        v = '{}'.format( self._var.getVal(forceNumeric=True) ) # force Numeric
+#        v = '{}'.format( self.commHdl().getVal(forceNumeric=True) ) # force Numeric
 #        return v
-    if self._var.isString():
+    if self.commHdl().isString():
       value = bytearray(value).decode('ascii')
     if self._cachedVal != value:
       # send value as a signal - this is properly sent from the
@@ -413,18 +411,14 @@ class ScalVal(IfObj):
 # Create a push-button for nodes with a cpsw Command interface
 class Cmd(IfObj):
   def __init__(self, path, node, widget_index ):
-    IfObj.__init__(self)
-    self._cmd = path.createCmd()
+    IfObj.__init__(self, path.createCmd())
     button    = QtGui.QPushButton("Execute")
     QtCore.QObject.connect(button, QtCore.SIGNAL('clicked(bool)'), self)
     self.setWidget( button )
 
   def __call__(self):
-    self._cmd.execute()
+    self.commHdl().execute()
     return False
-
-  def getDescription(self):
-    return self._cmd.getDescription()
 
 # Mutex guard (QMutexLocker is not useful since lifetime of python
 # object does not necessarily end when it goes out of scope)
@@ -510,6 +504,12 @@ class MyNode(object):
 
   def getChild(self):
     return self._child
+
+  def getConnectionName(self):
+    if self._ifObj:
+      return self._ifObj.getConnectionName()
+    else:
+      return self.buildPath().toString()
 
   def buildPath(self):
     l = list()
@@ -667,8 +667,7 @@ class Stream(IfObj):
   _strms   = []
 
   def __init__(self, path, node, widget_index):
-    IfObj.__init__(self)
-    self._strm   = path.createStream()
+    IfObj.__init__(self, path.createStream())
     #self._buf   = array.array('h',range(0,16384))
     self._buf    = np.empty(16384,'int16')
     self._buf.fill(0)
@@ -692,7 +691,7 @@ class Stream(IfObj):
     Stream._bufs.append( self._buf )
     Stream._strms.append( self )
     self.plot( 100 )
-    self._strm.setWidget( self )
+    self.commHdl().setWidget( self )
 
   def getCanvas(self):
     return self._canvas
@@ -707,9 +706,6 @@ class Stream(IfObj):
 
   def gb(self):
     return self._buf
-
-  def getDescription(self):
-    return self._strm.getDescription()
 
 class RightPressFilter(QtCore.QObject):
   def __init__(self):
@@ -877,7 +873,7 @@ def startGUI(yamlFile, yamlRoot, fixYaml=None, yamlIncDir=None, useEpics=False):
               yamlIncDir,
               fixYaml)
   signal.signal( signal.SIGINT, signal.SIG_DFL )
-  modl  = MyModel( rp )
+  modl  = MyModel( rp, useEpics )
   return (modl, rp)
 
 def main():

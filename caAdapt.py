@@ -18,6 +18,9 @@ class AdaptBase:
   def getDescription(self):
     return epics.caget( self._pv.pvname + ".DESC", timeout=0.0, use_monitor = True )
 
+  def getConnectionName(self):
+    return self._pv.pvname
+
 class CmdAdapt(AdaptBase):
   def __init__(self, path):
     AdaptBase.__init__(self, path, ":Ex")

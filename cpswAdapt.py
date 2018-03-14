@@ -52,7 +52,20 @@ class StringHeuristics:
         pass
     return False
 
-class VarAdapt:
+class AdaptBase:
+  def __init__(self, obj):
+    self._obj = obj
+
+  def obj(self):
+    return self._obj
+
+  def getDescription(self):
+    return self._obj.getDescription() 
+
+  def getConnectionName():
+    return self._obj.getPath().toString()
+
+class VarAdapt(AdaptBase):
 
   _ReprOther  = 0
   _ReprInt    = 1
@@ -60,22 +73,22 @@ class VarAdapt:
   _ReprFloat  = 3
 
   def __init__(self, var, readOnly, reprType):
-    self._var       = var
-    self._enumItems = self._var.getEnum()
+    AdaptBase.__init__(self, var)
+    self._enumItems = self.obj().getEnum()
     if None != self._enumItems:
       self._enumItems = self._enumItems.getItems()
     self._readOnly  = readOnly
     self._repr      = reprType
 
   def setVal(self, val, fromIdx = -1, toIdx = -1):
-    self._var.setVal( val, fromIdx=fromIdx, toIdx=toIdx )
+    self.obj().setVal( val, fromIdx=fromIdx, toIdx=toIdx )
 
   def setWidget(self, widgt):
     self._widgt     = widgt
     self._cbHelper  = CallbackHelper( self )
 
   def getValAsync(self):
-    self._var.getValAsync( self._cbHelper )
+    self.obj().getValAsync( self._cbHelper )
 
   def isReadOnly(self):
     return self._readOnly
@@ -84,10 +97,10 @@ class VarAdapt:
     return self._enumItems
 
   def getSizeBits(self):
-    return self._var.getSizeBits()
+    return self.obj().getSizeBits()
 
   def isSigned(self):
-    return self._var.isSigned()
+    return self.obj().isSigned()
 
   def getRepr(self):
     return self._repr
@@ -99,7 +112,7 @@ class VarAdapt:
     return self.getRepr() == VarAdapt._ReprString
 
   def toString(self):
-    return self._var.getPath().toString()
+    return self.obj().getPath().toString()
 
   # Called by Async IO Completion
   def callback(self, value):
@@ -108,18 +121,12 @@ class VarAdapt:
   def needPoll(self):
     return True
 
-  def getDescription(self):
-    return self._var.getDescription() 
-
 class CmdAdapt:
   def __init__(self, cmd):
-    self._cmd = cmd
+    AdaptBase.__init__(self, cmd)
 
   def execute(self):
-    self._cmd.execute()
-
-  def getDescription(self):
-    return self._cmd.getDescription() 
+    self.obj().execute()
 
 class ChildAdapt:
   def __init__(self, entry):
@@ -240,11 +247,11 @@ class PathAdapt:
   def origin(self):
     return self._path.origin()
 
-class StreamAdapt(QtCore.QThread):
+class StreamAdapt(AdaptBase, QtCore.QThread):
 
   def __init__(self, strm):
+    AdaptBase.__init__(self, strm)
     QtCore.QThread.__init__(self)
-    self._strm = strm
 
   def setWidget(self, widgt):
     self._widgt = widgt
@@ -252,16 +259,12 @@ class StreamAdapt(QtCore.QThread):
 
   def read(self):
     # divide bytes by sample-size
-    bufsz = int( self._strm.read(self._widgt.getBuf()) / 2 )
+    bufsz = int( self.obj().read(self._widgt.getBuf()) / 2 )
     #print('Got {} items'.format(bufsz))
     #print(self._widgt.getBuf()[0:20])
     self._widgt.plot( bufsz )
 
   def run(self):
-    with self._strm:
+    with self.obj():
       while True:
         self.read()
-
-  def getDescription(self):
-    return self._strm.getDescription() 
-
