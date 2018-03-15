@@ -1,6 +1,7 @@
 import yaml_cpp as yaml
-from cpswTreeGUICommon import InterfaceNotImplemented, NotFound
-from hashlib           import sha1
+import cpswTreeGUI
+from   cpswTreeGUICommon import InterfaceNotImplemented, NotFound
+from   hashlib           import sha1
 import epics
 
 class AdaptBase:
@@ -33,10 +34,6 @@ class StreamAdapt(AdaptBase):
     raise NotImplemented("STREAM not implemented for CA")
 
 class VarAdapt(AdaptBase):
-  _ReprOther  = 0
-  _ReprInt    = 1
-  _ReprString = 2
-  _ReprFloat  = 3
 
   def __init__(self, path, readOnly, reprType, hasEnum):
     AdaptBase.__init__(self, path, ":Rd") 
@@ -84,10 +81,10 @@ class VarAdapt(AdaptBase):
     return self._repr
 
   def isFloat(self):
-    return self.getRepr() == VarAdapt._ReprFloat
+    return self.getRepr() == cpswTreeGUI._ReprFloat
 
   def isString(self):
-    return self.getRepr() == VarAdapt._ReprString
+    return self.getRepr() == cpswTreeGUI._ReprString
 
   def toString(self):
     return self._var.getPath().toString()
@@ -132,13 +129,13 @@ class PathAdapt:
   def guessRepr(self):
     info = self.getTypeInfo().split(",")
     if info[0] == "FLT" and info[2] == "SCL":
-      return VarAdapt._ReprFloat
+      return cpswTreeGUI._ReprFloat
     if info[0] == "INT":
       if info[2] == "STR":
-        return VarAdapt._ReprString
+        return cpswTreeGUI._ReprString
       if info[2] == "SCL" or info[2] == "ENM" :
-        return VarAdapt._ReprInt
-    return VarAdapt._ReprOther
+        return cpswTreeGUI._ReprInt
+    return cpswTreeGUI._ReprOther
 
   def loadConfigFromYamlFile(self, yaml_file):
     raise NotImplemented("loadConfigFromYamlFile not implemented")
@@ -165,7 +162,7 @@ class PathAdapt:
     info  = self.getTypeInfo().split(",")
     ro    = info[1] != "RW"
     reprs = self.guessRepr()
-    if VarAdapt._ReprOther == reprs:
+    if cpswTreeGUI._ReprOther == reprs:
       raise InterfaceNotImplemented("Unkown representation")
     return VarAdapt( self, ro, reprs, info[2]=="ENM"  )
 
@@ -191,24 +188,24 @@ class PathAdapt:
     return hnam
  
 class ChildAdapt:
-  def __init__(self, path):
-    self._path = path
+  def __init__(self, chldp):
+    self._chldp = chldp
 
   def getStaticDescription(self):
     return None
 
   def isHub(self):
-    if not self._path[-1][1].IsMap():
+    if not self._chldp[-1][1].IsMap():
       return None
     return self
 
   def findByName(self, name):
-    return PathAdapt(self._path).findByName( name )
+    return PathAdapt(self._chldp).findByName( name )
 
   def getChildren(self):
     cl = list()
-    for c in self._path[-1][1]:
-      p = list( self._path )
+    for c in self._chldp[-1][1]:
+      p = list( self._chldp )
       p.append( (c.first.getAs(), c.second) )
       cl.append( ChildAdapt( p ) )
     return cl
@@ -217,4 +214,4 @@ class ChildAdapt:
     return 1 #FIXME
 
   def getName(self):
-    return self._path[-1][0]
+    return self._chldp[-1][0]

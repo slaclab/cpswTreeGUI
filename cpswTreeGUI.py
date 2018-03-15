@@ -20,6 +20,12 @@ import fixupYaml
 
 from   cpswTreeGUICommon import InterfaceNotImplemented
 
+_ReprOther  = 0
+_ReprInt    = 1
+_ReprString = 2
+_ReprFloat  = 3
+
+
 class MyModel(QtCore.QAbstractItemModel):
 
   def __init__(self, rootPath, useEpics):
@@ -31,7 +37,7 @@ class MyModel(QtCore.QAbstractItemModel):
     self._useEpics  = useEpics
     self._poller    = Poller(1000)
     self._col0Width = 0
-    self._root      = MyNode(self, ChildAdapt(rootPath.origin()) )
+    self._root      = MyNode(self, Adapter.ChildAdapt(rootPath.origin()) )
 
     self._tree      = QtGui.QTreeView()
     QtCore.QObject.connect( self._poller, QtCore.SIGNAL("_signl()"), self.update )
@@ -291,7 +297,7 @@ class ScalVal(IfObj):
     readOnly   = self.commHdl().isReadOnly()
     nelms      = path.getNelms()
 
-    if self.commHdl().getRepr() == VarAdapt._ReprString:
+    if self.commHdl().getRepr() == _ReprString:
       self._string = bytearray(nelms)
     else:
       self._string = None
@@ -559,7 +565,7 @@ class MyNode(object):
         if nelms > 1:
           # could be a string -- in this case we wouldn't want to expand
           if not childHub:
-            if VarAdapt._ReprString == path.findByName( child.getName() ).guessRepr():
+            if _ReprString == path.findByName( child.getName() ).guessRepr():
               leafmax = 0
           childNames = list()
           if childHub or nelms <= leafmax:
@@ -721,44 +727,53 @@ class RightPressFilter(QtCore.QObject):
 
 def main1(oargs):
 
-  useTcp        = False
-  srpV2         = False
-  noStreams     = False
-  ipAddr        = None
-  disableDepack = False
-  portMaps      = []
-  backDoor      = False
-  strHeuristic  = True
-  useEpics      = False
+  useTcp         = False
+  srpV2          = False
+  disableStreams = False
+  ipAddr         = None
+  disableDepack  = False
+  portMaps       = []
+  backDoor       = False
+  strHeuristic   = True
+  useEpics       = False
+  disableComm    = False
+  disableCPSW    = False
 
   ( opts, args ) = getopt.getopt(
                       oargs[1:],
-                      "ha:TBs",
+                      "ha:TBsC",
                       ["backdoor",
-                       "no-streams",
-                       "no-string-heuristics",
+                       "disableStreams",
+                       "disableStringHeuristics",
                        "tcp",
                        "mapPort=",
                        "ipAddress=",
                        "useEpics",
+                       "useEpicsOnly",
+                       "disableComm",
                        "help"] )
 
   for opt in opts:
-    if opt[0] in ('--useEpics'):
+    if opt[0]   in ('--useEpics'):
       useEpics = True
+    elif opt[0] in ('--useEpicsOnly'):
+      useEpics    = True
+      disableCPSW = True
 
   for opt in opts:
-    if   opt[0] in ('-a', '--ipAddress'):
-      ipAddr        = socket.gethostbyname( opt[1] )
-    elif opt[0] in ('-T', '--tcp'):
-      useTcp        = True
-    elif opt[0] in ('-B', '--backdoor'):
-      backDoor      = True
-    elif opt[0] in ('-s', '--no-streams'):
-      noStreams     = True
-    elif opt[0] in ('--no-string-heuristics'):
-      strHeuristic  = False
-    elif opt[0] in ('--mapPort'):
+    if   opt[0] in ('-a', '--ipAddress') and not useEpics:
+      ipAddr         = socket.gethostbyname( opt[1] )
+    elif opt[0] in ('-T', '--tcp') and not useEpics:
+      useTcp         = True
+    elif opt[0] in ('-B', '--backdoor') and not useEpics:
+      backDoor       = True
+    elif opt[0] in ('-s', '--disableStreams'):
+      disableStreams = True
+    elif opt[0] in ('--disableStringHeuristics'):
+      strHeuristic   = False
+    elif opt[0] in ('-C', '--disableComm'):
+      disableComm    = True
+    elif opt[0] in ('--mapPort') and not useEpics:
       opta = opt[1].split(':')
       if len(opta) != 2:
         raise RuntimeError('--mapPort option requires <fromPort>:<toPort> argument')
@@ -779,33 +794,34 @@ def main1(oargs):
         print("                                 default: directory where 'yaml_file' is located")
         print()
         print("  Long Options                 :")
-        print("      --ipAddress <addr>       : same as -a")
-        print("      --tcp                    : same as -T")
-        print("      --help                   : same as -h")
-        print("      --no-streams             : same as -s")
-        print("      --mapPort <f>:<t>        : patch UDP/TCP port '<f>' to port '<t>' in YAML")
+        print("    --ipAddress <addr>         : same as -a")
+        print("    --tcp                      : same as -T")
+        print("    --help                     : same as -h")
+        print("    --disableStreams           : same as -s")
+        print("    --mapPort <f>:<t>          : patch UDP/TCP port '<f>' to port '<t>' in YAML")
         print("                                 i.e., if a port is 'f' in YAML then change it")
         print("                                 to 't'")
-        print("      --no-string-heuristics   : disable some tests which guess if a value is a")
+        print("    --disableStringHeuristics  : disable some tests which guess if a value is a")
         print("                                 string. Some slow devices may take a long time")
         print("                                 to respond. If this annoys you try this option.")
-        print("      --backdoor               : patch YAML for \"backdoor\" access; implies '-s' and")
+        print("    --backdoor                 : patch YAML for \"backdoor\" access; implies '-s' and")
         print("                                 many features are altered: no RSSI/depacketizer/TDESTMux,")
         print("                                 SRP protocol is altered to V2 and only one port is enabled.")
         print("                                 By default this is port 8193 if --tcp is given and 8192")
         print("                                 otherwise. You still need to specify --tcp when using")
         print("                                 the rssi_bridge. If you need a non-standard port then")
         print("                                 use '--mapPort'")
-        print("      --useEpics               : Use EPICS CA to connect; more info with --help --useEpics")
+        print("    --useEpics                 : Use EPICS CA to connect; more info with --help --useEpics")
+        print("    --disableComm              : Disable CPSW communication. This option can be used to test YAML")
+        print("                                 and/or GUI files")
       else:
-        print("Usage: {} --useEpics [--help] yaml_file [root_node]".format(oargs[0]))
+        print("Usage: {} --useEpics|--useEpicsOnly [--help] yaml_file [root_node]".format(oargs[0]))
         print()
-        print("                               : Use EPICS CA to connect instead of CPSW. A proper IOC must")
+        print("    --useEpics                 : Use EPICS CA to connect instead of CPSW. A proper IOC must")
         print("                                 be running; most-likely it is an IOC running YCPSWASYN.")
-        print("                                 Such an IOC produces a dump of the device hierarchy from")
-        print("                                 which hashed PV names can be computed. This hierarchy is")
-        print("                                 in YAML format (but different from the CPSW YAML file).")
-        print("                                 Use this YAML file to build the GUI.")
+        print("    --useEpicsOnly             : Disable CPSW entirely but use a simplified YAML file.")
+        print("                                 Such YAML file is produced by a YCPSWASYN IOC.")
+        print("                                 NOTE: functionality is reduced in this mode")
 
       return
 
@@ -813,9 +829,9 @@ def main1(oargs):
     StringHeuristics.disable()
 
   if backDoor:
-    srpV2         = True
-    noStreams     = True
-    disableDepack = True
+    srpV2          = True
+    disableStreams = True
+    disableDepack  = True
     if len(portMaps) > 1:
       portMaps = [ portMaps[0] ]
     if len(portMaps) == 1:
@@ -841,33 +857,39 @@ def main1(oargs):
   else:
     yamlIncDir = None
 
-  if not useEpics:
+  if not disableCPSW:
+    if useEpics:
+      disableComm    = True
+    elif disableComm:
+      disableStreams = True
     fixYaml       = fixupYaml.Fixup(
-                      useTcp        = useTcp,
-                      srpV2         = srpV2,
-                      noStreams     = noStreams,
-                      ipAddr        = ipAddr,
-                      disableDepack = disableDepack,
-                      portMaps      = portMaps
+                      useTcp         = useTcp,
+                      srpV2          = srpV2,
+                      disableStreams = disableStreams,
+                      ipAddr         = ipAddr,
+                      disableDepack  = disableDepack,
+                      portMaps       = portMaps,
+                      disableComm    = disableComm
                     )
   else:
     fixYaml    = None
     yamlIncDir = None
   app      = QtGui.QApplication(args)
-  modl, rp = startGUI(yamlFile, yamlRoot, fixYaml, yamlIncDir, useEpics)
+  modl, rp = startGUI(yamlFile, yamlRoot, useEpics, disableCPSW, fixYaml, yamlIncDir)
   return (modl, app, rp)
 
-def startGUI(yamlFile, yamlRoot, fixYaml=None, yamlIncDir=None, useEpics=False):
+def startGUI(yamlFile, yamlRoot, useEpics=False, disableCPSW=False, fixYaml=None, yamlIncDir=None):
   if useEpics:
-    from   caAdapt   import VarAdapt, CmdAdapt, StreamAdapt, PathAdapt, ChildAdapt
+    if None == fixYaml and not disableCPSW:
+      fixYaml = fixupYaml.Fixup( disableComm = True )
+    if disableCPSW:
+      import caAdapt     as Adapter
+    else:
+      import cpswCaAdapt as Adapter
   else:
-    from   cpswAdapt import VarAdapt, CmdAdapt, StreamAdapt, PathAdapt, ChildAdapt
-  global VarAdapt
-  global CmdAdapt
-  global StreamAdapt
-  global PathAdapt
-  global ChildAdapt
-  rp = PathAdapt.loadYamlFile(
+    import cpswAdapt     as Adapter
+  global Adapter
+  rp = Adapter.PathAdapt.loadYamlFile(
               yamlFile,
               yamlRoot,
               yamlIncDir,

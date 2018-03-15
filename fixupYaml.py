@@ -2,14 +2,21 @@ import yaml_cpp
 import pycpsw
 
 class Fixup(pycpsw.YamlFixup):
-  def __init__(self, ipAddr=None, noStreams=False, srpV2=False, useTcp=False, disableDepack=False, portMaps=None):
+  def __init__(self, ipAddr=None, disableStreams=False, srpV2=False, useTcp=False, disableDepack=False, portMaps=None, disableComm=False):
     pycpsw.YamlFixup.__init__(self)
-    self._noStreams     = noStreams
-    self._srpV2         = srpV2
-    self._useTcp        = useTcp
-    self._ipAddr        = ipAddr
-    self._disableDepack = disableDepack
-    self._portMaps      = portMaps
+    self._disableStreams  = disableStreams
+    self._srpV2           = srpV2
+    self._useTcp          = useTcp
+    self._ipAddr          = ipAddr
+    self._disableDepack   = disableDepack
+    self._portMaps        = portMaps
+    self._noComm          = disableComm
+    if self._noComm:
+      self._srpV2         = False
+      self._useTcp        = False
+      self._ipAddr        = None
+      self._disableDepack = False
+      self._portMaps      = None
     self._portMap       = None
     if ( self._portMaps == None):
       self._portMaps = []
@@ -18,24 +25,26 @@ class Fixup(pycpsw.YamlFixup):
     return node != None and node.IsDefined()
 
   def edit(self, node, l, editPass):
-    if ( editPass == 0 ):
-      noStreams     = self._noStreams
-      srpV2         = self._srpV2
-      useTcp        = self._useTcp
-      ipAddr        = self._ipAddr
-      disableDepack = self._disableDepack
+    if editPass == 0:
+      disableStreams = self._disableStreams
+      srpV2          = self._srpV2
+      useTcp         = self._useTcp
+      ipAddr         = self._ipAddr
+      disableDepack  = self._disableDepack
     else:
-      noStreams     = False
-      srpV2         = False
-      useTcp        = False
-      ipAddr        = None
-      disableDepack = False
+      disableStreams = False
+      srpV2          = False
+      useTcp         = False
+      ipAddr         = None
+      disableDepack  = False
     if len(self._portMaps) == 0:
       portMap = None
     else:
       portMap = self._portMaps[editPass]
     cl = node["class"]
     if self.ok(cl) and cl.Scalar() == "NetIODev":
+      if self._noComm:
+        cl.set( "NullDev" )  
       if None != ipAddr:
         ip = self.find(node, "ipAddr")
         if not self.ok(ip):
@@ -43,7 +52,7 @@ class Fixup(pycpsw.YamlFixup):
         print("Fixing IP address; setting to {}\n".format(ipAddr))
         ip.set( ipAddr )
 
-      if (not useTcp and not noStreams and not srpV2
+      if (not useTcp and not disableStreams and not srpV2
           and not disableDepack and portMap == None):
         return
   
@@ -57,7 +66,7 @@ class Fixup(pycpsw.YamlFixup):
         at     = self.find(child,"at")
         isSrp  = False
         isStrm = False
-        if (   noStreams or srpV2 or disableDepack
+        if (   disableStreams or srpV2 or disableDepack
             or portMap != None ):
           got = self.findWithPath(at,   "SRP/protocolVersion")
           if None != got:
@@ -66,7 +75,7 @@ class Fixup(pycpsw.YamlFixup):
             path.insert(0, childit.first.Scalar())
             if srp.Scalar() == "SRP_UDP_NONE":
               isStrm = True
-              if noStreams:
+              if disableStreams:
                 child["instantiate"].set("False")
                 print("SRP Node found: {} {} -- disabling\n".format( "/".join(path), srp.Scalar()))
             else:
@@ -189,9 +198,9 @@ class Fixup(pycpsw.YamlFixup):
     self(node, None)
 
   def __call__(self, node, top):
-    if self._ipAddr != None or self._useTcp or self._noStreams or self._srpV2 or self._disableDepack or len(self._portMaps) > 0:
+    if self._ipAddr != None or self._useTcp or self._disableStreams or self._srpV2 or self._disableDepack or len(self._portMaps) > 0 or self._noComm:
       to = len(self._portMaps)
-      if to == 0:
+      if to == 0 or self._noComm:
         to = 1
       for editPass in range(0,to):
         self.trav(node, [], editPass)
