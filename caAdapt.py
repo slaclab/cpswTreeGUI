@@ -182,8 +182,8 @@ class PathAdapt:
 
   def hash(self):
     hashPrefix = self._p[0][2]
-    hnam = ""+sha1( bytearray( (hashPrefix + self.toString()), "ascii" ) ).hexdigest().upper()
-    hnam = hnam[0:43-3]
+    hnam = cpswTreeGUI._RecordNamePrefix+sha1( bytearray( (hashPrefix + self.toString()), "ascii" ) ).hexdigest().upper()
+    hnam = hnam[0:cpswTreeGUI._HashedNameLenMax]
     return hnam
  
 class ChildAdapt:

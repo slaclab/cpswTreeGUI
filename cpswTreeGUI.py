@@ -4,6 +4,7 @@ import sys
 import socket
 import getopt
 import re
+import os
 import sip
 sip.setapi('QString', 2)
 from   PyQt4                              import QtCore, QtGui
@@ -31,6 +32,10 @@ _ReprOther  = 0
 _ReprInt    = 1
 _ReprString = 2
 _ReprFloat  = 3
+
+_HashedNameLenMax = 40
+_RecordNamePrefix = ""
+_HashPrefix       = os.getenv("YCPSWASYN_HASH_PREFIX","")
 
 class MyModel(QtCore.QAbstractItemModel):
 
@@ -759,6 +764,7 @@ def main1(oargs):
                        "ipAddress=",
                        "useEpics",
                        "useEpicsOnly",
+                       "recordPrefix=",
                        "disableComm",
                        "help"] )
 
@@ -782,6 +788,8 @@ def main1(oargs):
       strHeuristic   = False
     elif opt[0] in ('-C', '--disableComm'):
       disableComm    = True
+    elif opt[0] in ('--recordPrefix'):
+      _RecordNamePrefix = opt[1]
     elif opt[0] in ('--mapPort') and not useEpics:
       opta = opt[1].split(':')
       if len(opta) != 2:
@@ -824,13 +832,18 @@ def main1(oargs):
         print("    --disableComm              : Disable CPSW communication. This option can be used to test YAML")
         print("                                 and/or GUI files")
       else:
-        print("Usage: {} --useEpics|--useEpicsOnly [--help] yaml_file [root_node]".format(oargs[0]))
+        print("Usage: {} --useEpics|--useEpicsOnly [--record-prefix=prefix] [--help] yaml_file [root_node]".format(oargs[0]))
         print()
         print("    --useEpics                 : Use EPICS CA to connect instead of CPSW. A proper IOC must")
         print("                                 be running; most-likely it is an IOC running YCPSWASYN.")
         print("    --useEpicsOnly             : Disable CPSW entirely but use a simplified YAML file.")
         print("                                 Such YAML file is produced by a YCPSWASYN IOC.")
         print("                                 NOTE: functionality is reduced in this mode")
+        print("    --record-prefix=prefix     : EPICS Record name prefix; must match (non-hashed) prefix set")
+        print("                                 on the IOC.")
+        print("  ENVIRONMENT:")
+        print("")
+        print("    YCPSWASYN_HASH_PREFIX      : Defines the hash prefix (must match prefix used on the IOC!).")
 
       return
 

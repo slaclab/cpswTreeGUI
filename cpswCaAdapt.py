@@ -125,9 +125,9 @@ class PathAdapt(PathAdaptBase):
     raise cpswTreeGUI.InterfaceNotImplemented("Streams not implemented")
 
   def hash(self):
-    hashPrefix = ""
-    namLim     = 43
-    recPrefix  = ""
+    hashPrefix = cpswTreeGUI._HashPrefix
+    namLim     = cpswTreeGUI._HashedNameLenMax
+    recPrefix  = cpswTreeGUI._RecordNamePrefix
     hnam = recPrefix + sha1( bytearray( (hashPrefix + self.toString()), "ascii" ) ).hexdigest().upper()
-    hnam = hnam[0:namLim-3]
+    hnam = hnam[0:namLim]
     return hnam
