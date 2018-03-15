@@ -1,7 +1,6 @@
 import yaml_cpp as yaml
 import cpswTreeGUI
 from   cpswAdaptBase     import *
-from   cpswTreeGUICommon import InterfaceNotImplemented, NotFound
 from   hashlib           import sha1
 import epics
 
@@ -120,10 +119,10 @@ class PathAdapt(PathAdaptBase):
     return VarAdapt( scalVal, ro, representation )
 
   def createCmd(self):
-    raise InterfaceNotImplemented("Streams not implemented")
+    raise cpswTreeGUI.InterfaceNotImplemented("Streams not implemented")
 
   def createStream(self):
-    raise InterfaceNotImplemented("Streams not implemented")
+    raise cpswTreeGUI.InterfaceNotImplemented("Streams not implemented")
 
   def hash(self):
     hashPrefix = ""

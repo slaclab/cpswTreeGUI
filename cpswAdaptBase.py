@@ -1,6 +1,5 @@
 import pycpsw
 import cpswTreeGUI
-from   cpswTreeGUICommon import InterfaceNotImplemented
 from   PyQt4             import QtCore
 
 class AdaptBase:
@@ -160,7 +159,7 @@ class PathAdaptBase:
           readOnly = True
 
     except pycpsw.InterfaceNotImplementedError as e:
-      raise InterfaceNotImplemented(e.args)
+      raise cpswTreeGUI.InterfaceNotImplemented(e.args)
 
     return ( val, readOnly, representation )
 

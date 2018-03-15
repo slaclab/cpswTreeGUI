@@ -1,7 +1,6 @@
 import pycpsw
 from   cpswAdaptBase     import *
 import cpswTreeGUI
-from   cpswTreeGUICommon import InterfaceNotImplemented
 from   PyQt4             import QtCore
 
 class CallbackHelper(pycpsw.AsyncIO):

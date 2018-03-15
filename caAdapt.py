@@ -1,6 +1,5 @@
 import yaml_cpp as yaml
 import cpswTreeGUI
-from   cpswTreeGUICommon import InterfaceNotImplemented, NotFound
 from   hashlib           import sha1
 import epics
 
@@ -110,7 +109,7 @@ class PathAdapt:
     rn = yaml.Node.LoadFile(yamlFile)
     n  = rn[yamlRoot]
     if not n.IsMap():
-      raise NotFound("Root node '" + yamlRoot + "' not found in: " + yamlFile)
+      raise cpswTreeGUI.NotFound("Root node '" + yamlRoot + "' not found in: " + yamlFile)
     hashPrefixNode = rn["hashPrefix"]
     if hashPrefixNode.IsDefined() and hashPrefixNode.IsScalar():
       hashPrefix=hashPrefixNode.getAs()
@@ -154,7 +153,7 @@ class PathAdapt:
         if not n.IsDefined() or n.IsNull():
           print("EL {}".format(el))
           print("XXXX lookup in {}".format(self.toString()))
-          raise NotFound(el + " -- not found in " + self.toString())
+          raise cpswTreeGUI.NotFound(el + " -- not found in " + self.toString())
         nl.append( (el,n) )
     return PathAdapt( nl );
 
@@ -163,17 +162,17 @@ class PathAdapt:
     ro    = info[1] != "RW"
     reprs = self.guessRepr()
     if cpswTreeGUI._ReprOther == reprs:
-      raise InterfaceNotImplemented("Unkown representation")
+      raise cpswTreeGUI.InterfaceNotImplemented("Unkown representation")
     return VarAdapt( self, ro, reprs, info[2]=="ENM"  )
 
   def createCmd(self):
     info = self.getTypeInfo().split(",")
     if info[0] == "CMD" and info[2] == "SCL":
       return CmdAdapt( self )
-    raise InterfaceNotImplemented("Streams not implemented")
+    raise cpswTreeGUI.InterfaceNotImplemented("Streams not implemented")
 
   def createStream(self):
-    raise InterfaceNotImplemented("Streams not implemented")
+    raise cpswTreeGUI.InterfaceNotImplemented("Streams not implemented")
 
   def getNelms(self):
     return 1 # FIXME

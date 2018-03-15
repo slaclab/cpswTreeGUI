@@ -17,14 +17,20 @@ from   matplotlib.figure                  import Figure
 from   matplotlib.backends.backend_qt4agg import FigureCanvasQTAgg    as FigureCanvas
 from   matplotlib.backends.backend_qt4agg import NavigationToolbar2QT as NavigationToolbar
 import fixupYaml
+import cpswTreeGUI
 
-from   cpswTreeGUICommon import InterfaceNotImplemented
+class InterfaceNotImplemented(Exception):
+  def __init__(self, args):
+    Exception.__init__(self,args)
+
+class NotFound(Exception):
+  def __init__(self, args):
+    Exception.__init__(self, args)
 
 _ReprOther  = 0
 _ReprInt    = 1
 _ReprString = 2
 _ReprFloat  = 3
-
 
 class MyModel(QtCore.QAbstractItemModel):
 
@@ -598,8 +604,11 @@ class MyNode(object):
                 widgt = ifObj.getWidget()
                 childNode.setIfObj( ifObj )
                 break
-              except InterfaceNotImplemented:
+              except cpswTreeGUI.InterfaceNotImplemented:
                 pass
+              except Exception as e:
+                print("GOT ", e.__class__)
+                raise
             else:
               if nelms > 1:
                 widgt = QtGui.QLabel("<Arrays or Interface not supported>")
