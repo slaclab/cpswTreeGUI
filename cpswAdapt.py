@@ -73,7 +73,7 @@ class VarAdapt(VarAdaptBase):
   def needPoll(self):
     return True
 
-class CmdAdapt:
+class CmdAdapt(AdaptBase):
   def __init__(self, cmd):
     AdaptBase.__init__(self, cmd)
 

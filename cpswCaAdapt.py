@@ -19,8 +19,9 @@ class CAAdaptBase:
   def getConnectionName(self):
     return self._pv.pvname
 
-class CmdAdapt(CAAdaptBase):
+class CmdAdapt(AdaptBase, CAAdaptBase):
   def __init__(self, cmd):
+    AdaptBase.__init__(self, cmd)
     CAAdaptBase.__init__(self, PathAdapt( cmd.getPath() ), ":Ex")
 
   def execute(self):
@@ -29,8 +30,9 @@ class CmdAdapt(CAAdaptBase):
   def getConnectionName(self):
     return CAAdaptBase.getConnectionName( self )
 
-class StreamAdapt(CAAdaptBase):
-  def __init__(self, path):
+class StreamAdapt(AdaptBase, CAAdaptBase):
+  def __init__(self, strm):
+    #AdaptBase.__init__(self, strm)
     raise NotImplemented("STREAM not implemented for CA")
 
   def getConnectionName(self):
