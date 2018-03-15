@@ -838,7 +838,7 @@ def main1(oargs):
         print("                                 be running; most-likely it is an IOC running YCPSWASYN.")
         print("    --useEpicsOnly             : Disable CPSW entirely but use a simplified YAML file.")
         print("                                 Such YAML file is produced by a YCPSWASYN IOC.")
-        print("                                 NOTE: functionality is reduced in this mode")
+        print("                                 NOTE: functionality is reduced in this mode.")
         print("    --record-prefix=prefix     : EPICS Record name prefix; must match (non-hashed) prefix set")
         print("                                 on the IOC.")
         print("  ENVIRONMENT:")

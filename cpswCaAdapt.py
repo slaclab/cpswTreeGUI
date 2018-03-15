@@ -41,11 +41,14 @@ class VarAdapt(VarAdaptBase, CAAdaptBase):
   def __init__(self, svb, readOnly, reprType):
     VarAdaptBase.__init__(self, svb, readOnly, reprType)
     CAAdaptBase.__init__(self, PathAdapt( svb.getPath() ), ":Rd")
-    enums = self.getEnumItems()
+    self.signoff_ = 0
+    enums         = self.getEnumItems()
     if None != enums:
       self.enumReverseMap_ = { entry[1]: entry[0] for entry in enums }
     else:
       self.enumReverseMap_ = None
+      if not svb.isSigned():
+        self.signoff_ = 1 << svb.getSizeBits()
     
     if not readOnly:
       self._pvw     = epics.get_pv(self.hnam()+":St", connection_timeout=0.0)
@@ -76,6 +79,9 @@ class VarAdapt(VarAdaptBase, CAAdaptBase):
     val = kwargs["value"]
     if None != self.enumReverseMap_:
       val = self.enumReverseMap_.get( val, "???" )
+    else:
+      if not self.isString() and val < 0:
+        val = val + self.signoff_
     self.callback( val )
 
   def getConnectionName(self):
