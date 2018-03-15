@@ -169,7 +169,7 @@ class PathAdaptBase:
         raise pycpsw.InterfaceNotImplementedError("Arrays of commands not supported")
       cmd = pycpsw.Command.create( self._path )
     except pycpsw.InterfaceNotImplementedError as e:
-      raise InterfaceNotImplemented(e.args)
+      raise cpswTreeGUI.InterfaceNotImplemented(e.args)
     return cmd
 
   def createStream(self):
@@ -180,5 +180,5 @@ class PathAdaptBase:
         raise pycpsw.InterfaceNotImplementedError("Timing Stream Disabled")
       strm  = pycpsw.Stream.create( self._path )
     except pycpsw.InterfaceNotImplementedError as e:
-      raise InterfaceNotImplemented(e.args)
+      raise cpswTreeGUI.InterfaceNotImplemented(e.args)
     return strm

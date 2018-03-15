@@ -182,8 +182,8 @@ class PathAdapt:
 
   def hash(self):
     hashPrefix = self._p[0][2]
-    hnam = "H:"+sha1( bytearray( (hashPrefix + self.toString()), "ascii" ) ).hexdigest().upper()
-    hnam = hnam[0:40-3]
+    hnam = ""+sha1( bytearray( (hashPrefix + self.toString()), "ascii" ) ).hexdigest().upper()
+    hnam = hnam[0:43-3]
     return hnam
  
 class ChildAdapt:
