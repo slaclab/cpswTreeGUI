@@ -40,6 +40,9 @@ class VarAdaptBase(AdaptBase):
   def getEnumItems(self):
     return self._enumItems
 
+  def hasEnums(self):
+    return None != self.getEnumItems()
+
   def getSizeBits(self):
     return self.obj().getSizeBits()
 
