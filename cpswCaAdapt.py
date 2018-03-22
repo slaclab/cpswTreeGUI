@@ -2,22 +2,40 @@ import yaml_cpp as yaml
 import cpswTreeGUI
 from   cpswAdaptBase     import *
 from   hashlib           import sha1
+from   epics             import ca
 import epics
 
+class CAConnector:
+  def __init__(self, caAdapter):
+    self.caAdapter_ = caAdapter
+
+  def __call__(self, **kwargs):
+    if kwargs["conn"]:
+      self.caAdapter_.subscribe()
+
 class CAAdaptBase:
-  def __init__(self, path, suff):
-    self._path = path
-    self._hnam = path.hash()
-    self._pv   = epics.get_pv(self._hnam + suff, connection_timeout=0.0)
+  def __init__(self, path, suff, isSubscriber=False):
+    self._path         = path
+    self._hnam         = path.hash()
+    self._cnam         = self._hnam + suff
+    if isSubscriber:
+      self._chid = None
+    else:
+      self._chid = ca.create_channel(self._cnam)
+
+  def createChannel(self):
+    self._chid = ca.create_channel(self._cnam, callback = CAConnector(self))
 
   def hnam(self):
     return self._hnam
 
-  def pv(self):
-    return self._pv
+  def chid(self):
+    return self._chid
 
   def getConnectionName(self):
-    return self._pv.pvname
+    if self._chid:
+      return ca.name( self._chid )
+    return "<Not Connected>"
 
 class CmdAdapt(AdaptBase, CAAdaptBase):
   def __init__(self, cmd):
@@ -25,7 +43,7 @@ class CmdAdapt(AdaptBase, CAAdaptBase):
     CAAdaptBase.__init__(self, PathAdapt( cmd.getPath() ), ":Ex")
 
   def execute(self):
-    self._pv.put("Run")
+    ca.put( self._chid, 1 )
 
   def getConnectionName(self):
     return CAAdaptBase.getConnectionName( self )
@@ -42,31 +60,37 @@ class VarAdapt(VarAdaptBase, CAAdaptBase):
 
   def __init__(self, svb, readOnly, reprType):
     VarAdaptBase.__init__(self, svb, readOnly, reprType)
-    CAAdaptBase.__init__(self, PathAdapt( svb.getPath() ), ":Rd")
+    CAAdaptBase.__init__(self, PathAdapt( svb.getPath() ), ":Rd", True)
     self.signoff_ = 0
-    enums         = self.getEnumItems()
-    if None != enums:
-      self.enumReverseMap_ = { entry[1]: entry[0] for entry in enums }
-    else:
-      self.enumReverseMap_ = None
-      if not svb.isSigned():
+    self.monitor_ = None
+    if None == self.getEnumItems() and not svb.isSigned():
         self.signoff_ = 1 << svb.getSizeBits()
-    
+
+    # if we don't have to fight with the subscription stuff
+    # then 'pv' is easier
     if not readOnly:
-      self._pvw     = epics.get_pv(self.hnam()+":St", connection_timeout=0.0)
-    print("Made PV: '{}' -- type '{}'".format(self.hnam()+":Rd", self.pv().type))
+      self._pvw   = epics.get_pv( self.hnam() + ":St", connection_timeout=0.0 )
 
   def setVal(self, val, fromIdx = -1, toIdx = -1):
     self._pvw.put( val )
 
   def setWidget(self, widgt):
     VarAdaptBase.setWidget(self, widgt)
-    self.pv().add_callback(self, with_ctrlvars=False)
-    asStr           = (None != self.getEnumItems())
-    val             = self.pv().get( timeout=0.0 )
+    self.createChannel()
+    print("Made PV: '{}' -- type '{}'".format(self.hnam()+":Rd", ca.field_type( self.chid() )))
+
+  def subscribe(self):
+    # MUST keep reference to monitor around! (see pyepics docs)
+    if None != self.monitor_:
+      # re-connect event
+      return
+    withCtrl      = None != self.getEnumItems()
+    self.monitor_ = ca.create_subscription( self.chid(), callback=self, use_ctrl=withCtrl )
+    if None != self.getEnumItems():
+      val = ca.get( self.chid(), ftype=0, wait=False )
+    else:
+      val = ca.get( self.chid(), wait=False )
     if None != val:
-      if None != self.enumReverseMap_:
-        val = self.enumReverseMap_.get( val, "???" )
       # if connection was fast we must update
       self.callback( val )
 
@@ -79,8 +103,8 @@ class VarAdapt(VarAdaptBase, CAAdaptBase):
 
   def __call__(self, **kwargs):
     val = kwargs["value"]
-    if None != self.enumReverseMap_:
-      val = self.enumReverseMap_.get( val, "???" )
+    if None != self.getEnumItems():
+      val = kwargs["enum_strs"][val].decode("ascii")
     else:
       if not self.isString() and val < 0:
         val = val + self.signoff_
