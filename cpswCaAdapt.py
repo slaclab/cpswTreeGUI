@@ -7,26 +7,30 @@ import epics
 class CAAdaptBase:
   def __init__(self, path, suff, needCtrl=False):
     self._path = path
-    self._hnam = path.hash()
+    self._hnam = path.hash(suff)
+    self._suff = suff;
     if needCtrl:
       form       = 'ctrl'
     else:
       form       = 'native'
-    self._pv   = epics.get_pv(self._hnam + suff, form=form, connection_timeout=0.0)
+    self._pv   = epics.get_pv(self._hnam, form=form, connection_timeout=0.0)
 
   def hnam(self):
     return self._hnam
+
+  def path(self):
+    return self._path
 
   def pv(self):
     return self._pv
 
   def getConnectionName(self):
-    return self._pv.pvname
+    return self.path().getFull(self._suff)
 
 class CmdAdapt(AdaptBase, CAAdaptBase):
   def __init__(self, cmd):
     AdaptBase.__init__(self, cmd)
-    CAAdaptBase.__init__(self, PathAdapt( cmd.getPath() ), ":Ex")
+    CAAdaptBase.__init__(self, PathAdapt( cmd.getPath() ), "Ex")
 
   def execute(self):
     self._pv.put("Run")
@@ -46,15 +50,16 @@ class VarAdapt(VarAdaptBase, CAAdaptBase):
 
   def __init__(self, svb, readOnly, reprType):
     VarAdaptBase.__init__(self, svb, readOnly, reprType)
-    CAAdaptBase.__init__(self, PathAdapt( svb.getPath() ), ":Rd", self.hasEnums())
+    CAAdaptBase.__init__(self, PathAdapt( svb.getPath() ), "Rd", self.hasEnums())
 
     self.signoff_ = 0
     if not svb.isSigned() and not self.hasEnums():
       self.signoff_ = 1 << svb.getSizeBits()
+
     
     if not readOnly:
-      self._pvw     = epics.get_pv(self.hnam()+":St", connection_timeout=0.0)
-    print("Made PV: '{}' -- type '{}'".format(self.hnam()+":Rd", self.pv().type))
+      self._pvw     = epics.get_pv(self.path().hash("St"), connection_timeout=0.0)
+    print("Made PV: '{}' -- type '{}'".format(self.hnam(), self.pv().type))
 
   def setVal(self, val, fromIdx = -1, toIdx = -1):
     self._pvw.put( val )
@@ -127,15 +132,18 @@ class PathAdapt(PathAdaptBase):
     return VarAdapt( scalVal, ro, representation )
 
   def createCmd(self):
-    raise cpswTreeGUI.InterfaceNotImplemented("Streams not implemented")
+    cmd = PathAdaptBase.createCmd( self )
+    return CmdAdapt( cmd )
 
   def createStream(self):
     raise cpswTreeGUI.InterfaceNotImplemented("Streams not implemented")
 
-  def hash(self):
-    hashPrefix = cpswTreeGUI._HashPrefix
+  def getFull(self, suff=""):
+   	return cpswTreeGUI._HashPrefix + self.toString() + suff 
+
+  def hash(self, suff):
     namLim     = cpswTreeGUI._HashedNameLenMax
     recPrefix  = cpswTreeGUI._RecordNamePrefix
-    hnam = recPrefix + sha1( bytearray( (hashPrefix + self.toString()), "ascii" ) ).hexdigest().upper()
+    hnam = recPrefix + sha1( bytearray( self.getFull(suff) , "ascii" ) ).hexdigest().upper()
     hnam = hnam[0:namLim]
     return hnam
