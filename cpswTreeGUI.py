@@ -494,9 +494,11 @@ class MyNode(object):
     self._children = None
     self._model    = model
     self._child    = child
+    self._debug    = False
     if not name:
       name = child.getName()
-    print("Making node with name ", name)
+    if self._debug:
+      print("Making node with name ", name)
     self._name     = name
     self._desc     = None
     self._hub      = child.isHub()
@@ -532,22 +534,26 @@ class MyNode(object):
     l = list()
     n = self
     p = n.parent()
-    print("buildPath")
+    if self._debug:
+      print("buildPath")
     while None != p:
-      print("haveParent")
+      if self._debug:
+        print("haveParent")
       l.insert(0, n.getNodeName())
       n = p
       p = p.parent()
     pnam = '/'.join(l)
-    if None == pnam:
-    	print("buildPath pnam NONE")
-    else:
-    	print("buildPath pnam", pnam)
+    if self._debug:
+      if None == pnam:
+        print("buildPath pnam NONE")
+      else:
+        print("buildPath pnam", pnam)
     path = n._child.findByName( pnam )
-    if None == path:
-      print("buildPath path NONE")
-    else:
-      print("buildPath path", path.toString())
+    if self._debug:
+      if None == path:
+        print("buildPath path NONE")
+      else:
+        print("buildPath path", path.toString())
     return path
 
   def addChild(self, child):
