@@ -2,7 +2,7 @@ import yaml_cpp
 import pycpsw
 
 class Fixup(pycpsw.YamlFixup):
-  def __init__(self, ipAddr=None, disableStreams=False, srpV2=False, useTcp=False, disableDepack=False, portMaps=None, disableComm=False):
+  def __init__(self, ipAddr=None, disableStreams=False, srpV2=False, useTcp=False, disableDepack=False, portMaps=None, disableComm=False, justLoadYaml=False, srpTimeoutUS=None):
     pycpsw.YamlFixup.__init__(self)
     self._disableStreams  = disableStreams
     self._srpV2           = srpV2
@@ -11,6 +11,8 @@ class Fixup(pycpsw.YamlFixup):
     self._disableDepack   = disableDepack
     self._portMaps        = portMaps
     self._noComm          = disableComm
+    self._justLoadYaml    = justLoadYaml
+    self._srpTimeout      = srpTimeoutUS
     if self._noComm:
       self._srpV2         = False
       self._useTcp        = False
@@ -20,6 +22,9 @@ class Fixup(pycpsw.YamlFixup):
     self._portMap       = None
     if ( self._portMaps == None):
       self._portMaps = []
+
+  def getJustLoadYaml(self):
+    return self._justLoadYaml
 
   def ok(self,node):
     return node != None and node.IsDefined()
@@ -43,7 +48,7 @@ class Fixup(pycpsw.YamlFixup):
       portMap = self._portMaps[editPass]
     cl = node["class"]
     if self.ok(cl) and cl.Scalar() == "NetIODev":
-      if self._noComm:
+      if self._noComm or self._justLoadYaml:
         cl.set( "NullDev" )  
       if None != ipAddr:
         ip = self.find(node, "ipAddr")
@@ -62,27 +67,29 @@ class Fixup(pycpsw.YamlFixup):
 
       for childit in children:
         #print("Checking {}\n".format(childit.first.Scalar()))
-        child  = childit.second
-        at     = self.find(child,"at")
-        isSrp  = False
-        isStrm = False
-        if (   disableStreams or srpV2 or disableDepack
+        child       = childit.second
+        at          = self.find(child,"at")
+        isSrp       = False
+        isStrm      = False
+        isSrp2Remap = False
+        if (   disableStreams or srpV2 or disableDepack or useTcp
             or portMap != None ):
           got = self.findWithPath(at,   "SRP/protocolVersion")
           if None != got:
-            (srp, path, parent) = got
+            (srpProt, path, parent) = got
             path.insert(0, "at")
             path.insert(0, childit.first.Scalar())
-            if srp.Scalar() == "SRP_UDP_NONE":
+            if srpProt.Scalar() == "SRP_UDP_NONE":
               isStrm = True
               if disableStreams:
                 child["instantiate"].set("False")
-                print("SRP Node found: {} {} -- disabling\n".format( "/".join(path), srp.Scalar()))
+                print("SRP Node found: {} {} -- disabling\n".format( "/".join(path), srpProt.Scalar()))
             else:
               isSrp = True
-              if srpV2 and srp.Scalar() == "SRP_UDP_V3":
-                print("SRP Node found: {} {} -- changing to SRP_UDP_V2\n".format( "/".join(path), srp.Scalar()))
-                srp.set("SRP_UDP_V2")
+              if srpV2 and srpProt.Scalar() == "SRP_UDP_V3":
+                print("SRP Node found: {} {} -- changing to SRP_UDP_V2\n".format( "/".join(path), srpProt.Scalar()))
+                srpProt.set("SRP_UDP_V2")
+                isSrp2Remap = True
               if disableDepack:
                 got = self.findWithPath(at, "depack")
                 if None != got:
@@ -98,6 +105,9 @@ class Fixup(pycpsw.YamlFixup):
                   path.insert(0, childit.first.Scalar())
                   print("TDESTMux found: {} -- disabling\n".format( "/".join(path)))
                   node["instantiate"].set("False")
+              if (isSrp2Remap or useTcp) and None != self._srpTimeout:
+                print("Patching SRP timeout (fixup to TCP or SRP2): {}".format(self._srpTimeout))
+                parent["timeoutUS"].set(self._srpTimeout)
           else:
             #print("Non-SRP Node found: {}\n".format( "/".join(l) ))
             pass
@@ -128,7 +138,12 @@ class Fixup(pycpsw.YamlFixup):
             if useTcp:
               for x in parent:
                 if x.first.Scalar() == "UDP":
-                  print("UDP Node found: {} -- changing to TCP\n".format( "/".join(path) ))
+                  rssimsg = ""
+                  for rssi in parent:
+                    if rssi.first.Scalar() == "RSSI":
+                      rssimsg = "(with RSSI)"
+                      break
+                  print("UDP{} Node found: {} -- changing to TCP (port {})\n".format( rssimsg, "/".join(path), prt.getAs() ))
                   x.first.set("TCP")
                   break
           else:
@@ -198,7 +213,7 @@ class Fixup(pycpsw.YamlFixup):
     self(node, None)
 
   def __call__(self, node, top):
-    if self._ipAddr != None or self._useTcp or self._disableStreams or self._srpV2 or self._disableDepack or len(self._portMaps) > 0 or self._noComm:
+    if self._ipAddr != None or self._useTcp or self._disableStreams or self._srpV2 or self._disableDepack or len(self._portMaps) > 0 or self._noComm or self._justLoadYaml:
       to = len(self._portMaps)
       if to == 0 or self._noComm:
         to = 1

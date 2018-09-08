@@ -758,6 +758,8 @@ def main1(oargs):
   useEpics       = False
   disableComm    = False
   disableCPSW    = False
+  justLoadYaml   = False
+  srpTimeoutUS   = "5000000"
 
   ( opts, args ) = getopt.getopt(
                       oargs[1:],
@@ -772,6 +774,8 @@ def main1(oargs):
                        "useEpicsOnly",
                        "recordPrefix=",
                        "disableComm",
+                       "justLoadYaml",
+                       "srpTimeoutUS=",
                        "help"] )
 
   for opt in opts:
@@ -796,6 +800,15 @@ def main1(oargs):
       disableComm    = True
     elif opt[0] in ('--recordPrefix'):
       _RecordNamePrefix = opt[1]
+    elif opt[0] in ('--justLoadYaml'):
+      justLoadYaml = True
+    elif opt[0] in ('--srpTimeoutUS'):
+      try:
+        int(opt[1])
+      except:
+        print("Invalid value for --srpTimeoutUS -- must be an integer number of micro-Seconds")
+        sys.exit(1)
+      srpTimeoutUS = opt[1]
     elif opt[0] in ('--mapPort') and not useEpics:
       opta = opt[1].split(':')
       if len(opta) != 2:
@@ -835,8 +848,18 @@ def main1(oargs):
         print("                                 the rssi_bridge. If you need a non-standard port then")
         print("                                 use '--mapPort'")
         print("    --useEpics                 : Use EPICS CA to connect; more info with --help --useEpics")
-        print("    --disableComm              : Disable CPSW communication. This option can be used to test YAML")
-        print("                                 and/or GUI files")
+        print("    --disableComm              : Disable CPSW communication. This option can be used to test")
+        print("                                 YAML and/or GUI files")
+        print("    --justLoadYaml             : just load the YAML file and exit; used to test/debug the")
+        print("                                 fixup procedure.")
+        print("                                 NOTE: other options affecting the YAML fixup process are")
+        print("                                       being applied!")
+        print("    --srpTimeoutUS <timeout>   : When using TCP over a WAN connection then it might be")
+        print("                                 necessary to increase the timeout for SRP. By default")
+        print("                                 the timeout is set to 5 seconds if --tcp is given.")
+        print("                                 This option is only necessary if you want to change")
+        print("                                 this default.")
+        print("                                 NOTE: the timeout must be specified in micro-seconds!")
       else:
         print("Usage: {} --useEpics|--useEpicsOnly [--record-prefix=prefix] [--help] yaml_file [root_node]".format(oargs[0]))
         print()
@@ -897,14 +920,14 @@ def main1(oargs):
                       ipAddr         = ipAddr,
                       disableDepack  = disableDepack,
                       portMaps       = portMaps,
-                      disableComm    = disableComm
+                      disableComm    = disableComm,
+                      justLoadYaml   = justLoadYaml,
+                      srpTimeoutUS   = srpTimeoutUS
                     )
   else:
     fixYaml    = None
     yamlIncDir = None
-  app      = QtGui.QApplication(args)
-  modl, rp = startGUI(yamlFile, yamlRoot, useEpics, disableCPSW, fixYaml, yamlIncDir)
-  return (modl, app, rp)
+  return startGUI(yamlFile, yamlRoot, useEpics, disableCPSW, fixYaml, yamlIncDir)
 
 def startGUI(yamlFile, yamlRoot, useEpics=False, disableCPSW=False, fixYaml=None, yamlIncDir=None):
   if useEpics:
@@ -922,9 +945,12 @@ def startGUI(yamlFile, yamlRoot, useEpics=False, disableCPSW=False, fixYaml=None
               yamlRoot,
               yamlIncDir,
               fixYaml)
+  if None != fixYaml and fixYaml.getJustLoadYaml():
+    return None
   signal.signal( signal.SIGINT, signal.SIG_DFL )
   modl  = MyModel( rp, useEpics )
-  return (modl, rp)
+  app   = QtCore.QCoreApplication.instance()
+  return (modl, app, rp)
 
 def main():
   return main2(sys.argv)
