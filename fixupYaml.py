@@ -2,7 +2,9 @@ import yaml_cpp
 import pycpsw
 
 class Fixup(pycpsw.YamlFixup):
-  def __init__(self, ipAddr=None, disableStreams=False, srpV2=False, useTcp=False, disableDepack=False, portMaps=None, disableComm=False, justLoadYaml=False, srpTimeoutUS=None):
+  def __init__(self, ipAddr=None,   disableStreams=False, srpV2=False,       useTcp=False,
+               disableDepack=False, portMaps=None,        disableComm=False, justLoadYaml=False,
+               srpTimeoutUS=None,   rssiBridge=None):
     pycpsw.YamlFixup.__init__(self)
     self._disableStreams  = disableStreams
     self._srpV2           = srpV2
@@ -13,12 +15,17 @@ class Fixup(pycpsw.YamlFixup):
     self._noComm          = disableComm
     self._justLoadYaml    = justLoadYaml
     self._srpTimeout      = srpTimeoutUS
+    self._rssiBridge      = rssiBridge
+    if None != self._rssiBridge:
+      # CPSW already maps all udp to tcp
+      self._useTcp = False
     if self._noComm:
       self._srpV2         = False
       self._useTcp        = False
       self._ipAddr        = None
       self._disableDepack = False
       self._portMaps      = None
+      self._rssiBridge    = None
     self._portMap       = None
     if ( self._portMaps == None):
       self._portMaps = []
@@ -36,12 +43,14 @@ class Fixup(pycpsw.YamlFixup):
       useTcp         = self._useTcp
       ipAddr         = self._ipAddr
       disableDepack  = self._disableDepack
+      rssiBridge     = self._rssiBridge
     else:
       disableStreams = False
       srpV2          = False
       useTcp         = False
       ipAddr         = None
       disableDepack  = False
+      rssiBridge     = None
     if len(self._portMaps) == 0:
       portMap = None
     else:
@@ -56,6 +65,9 @@ class Fixup(pycpsw.YamlFixup):
           raise RuntimeError("No ipAddr node found")
         print("Fixing IP address; setting to {}\n".format(ipAddr))
         ip.set( ipAddr )
+
+      if None != rssiBridge:
+        node["rssiBridge"].set(rssiBridge)
 
       if (not useTcp and not disableStreams and not srpV2
           and not disableDepack and portMap == None):
@@ -213,7 +225,9 @@ class Fixup(pycpsw.YamlFixup):
     self(node, None)
 
   def __call__(self, node, top):
-    if self._ipAddr != None or self._useTcp or self._disableStreams or self._srpV2 or self._disableDepack or len(self._portMaps) > 0 or self._noComm or self._justLoadYaml:
+    if (    None != self._ipAddr or self._useTcp or self._disableStreams or self._srpV2
+         or self._disableDepack or len(self._portMaps) > 0 or self._noComm or self._justLoadYaml
+         or None != self._rssiBridge ):
       to = len(self._portMaps)
       if to == 0 or self._noComm:
         to = 1

@@ -760,22 +760,26 @@ def main1(oargs):
   disableCPSW    = False
   justLoadYaml   = False
   srpTimeoutUS   = "5000000"
+  rssiBridge     = None
+  socksProxy     = None
 
   ( opts, args ) = getopt.getopt(
                       oargs[1:],
                       "ha:TBsC",
                       ["backdoor",
+                       "disableComm",
                        "disableStreams",
                        "disableStringHeuristics",
-                       "tcp",
-                       "mapPort=",
                        "ipAddress=",
+                       "justLoadYaml",
+                       "mapPort=",
+                       "recordPrefix=",
+                       "rssiBridge=",
+                       "socksProxy=",
                        "useEpics",
                        "useEpicsOnly",
-                       "recordPrefix=",
-                       "disableComm",
-                       "justLoadYaml",
                        "srpTimeoutUS=",
+                       "tcp",
                        "help"] )
 
   for opt in opts:
@@ -800,8 +804,12 @@ def main1(oargs):
       disableComm    = True
     elif opt[0] in ('--recordPrefix'):
       _RecordNamePrefix = opt[1]
+    elif opt[0] in ('--rssiBridge'):
+      rssiBridge     = opt[1]
+    elif opt[0] in ('--socksProxy'):
+      socksProxy     = opt[1]
     elif opt[0] in ('--justLoadYaml'):
-      justLoadYaml = True
+      justLoadYaml   = True
     elif opt[0] in ('--srpTimeoutUS'):
       try:
         int(opt[1])
@@ -820,7 +828,7 @@ def main1(oargs):
         print()
         print("          -a <ip_addr>         : patch IP address in YAML")
         print("          -B                   : see '--backdoor' -- EXPERT USE ONLY")
-        print("          -T                   : use TCP transport (requires rssi bridge connection)")
+        print("          -T                   : use TCP transport (requires rssi bridge connection; DEPRECATED: use --rssiBridge)")
         print("          -s                   : disable all streams")
         print("          -h                   : this message")
         print()
@@ -830,8 +838,13 @@ def main1(oargs):
         print("                                 default: directory where 'yaml_file' is located")
         print()
         print("  Long Options                 :")
-        print("    --ipAddress <addr>         : same as -a")
-        print("    --tcp                      : same as -T")
+        print("    --ipAddress  <addr>        : same as -a")
+        print("    --rssiBridge <addr>        : connect via an 'rssi bridge' proxy on the machine at <addr>.")
+        print("    --socksProxy <addr>        : connect to any TCP destinations (including connections to a")
+        print("                                 'rssi bridge') via a SOCKS proxy on the machine at <addr>.")
+        print("                                 This feature is mostly used for tunneling TCP via SSH;")
+        print("                                 consult the SSH documentation (-D option). In most cases")
+        print("                                 this is simply 'localhost'.")
         print("    --help                     : same as -h")
         print("    --disableStreams           : same as -s")
         print("    --mapPort <f>:<t>          : patch UDP/TCP port '<f>' to port '<t>' in YAML")
@@ -860,6 +873,7 @@ def main1(oargs):
         print("                                 This option is only necessary if you want to change")
         print("                                 this default.")
         print("                                 NOTE: the timeout must be specified in micro-seconds!")
+        print("    --tcp                      : same as -T (DEPRECATED: use --rssiBridge")
       else:
         print("Usage: {} --useEpics|--useEpicsOnly [--record-prefix=prefix] [--help] yaml_file [root_node]".format(oargs[0]))
         print()
@@ -870,6 +884,14 @@ def main1(oargs):
         print("                                 NOTE: functionality is reduced in this mode.")
         print("    --record-prefix=prefix     : EPICS Record name prefix; must match (non-hashed) prefix set")
         print("                                 on the IOC.")
+        print("    --socksProxy <addr>        : connect to any EPICS IOC via a SOCKS proxy on the machine")
+        print("                                 at <addr>.")
+        print("                                 This feature is mostly used for tunneling TCP via SSH;")
+        print("                                 consult the SSH documentation (-D option). In most cases")
+        print("                                 this is simply 'localhost'.")
+        print("                                 NOTE: this requires the EPICS client to be patched for SOCKS;")
+        print("                                 consult 'http://slac.stanford.edu/~strauman/epics/caxy/' for")
+        print("                                 more information.")
         print("  ENVIRONMENT:")
         print("")
         print("    YCPSWASYN_HASH_PREFIX      : Defines the hash prefix (must match prefix used on the IOC!).")
@@ -908,6 +930,12 @@ def main1(oargs):
   else:
     yamlIncDir = None
 
+  if None != socksProxy:
+    if useEpics:
+      os.environ["EPICS_SOCKS_PROXY"] = socksProxy
+    else:
+      os.environ["SOCKS_PROXY"] = socksProxy
+
   if not disableCPSW:
     if useEpics:
       disableComm    = True
@@ -922,7 +950,8 @@ def main1(oargs):
                       portMaps       = portMaps,
                       disableComm    = disableComm,
                       justLoadYaml   = justLoadYaml,
-                      srpTimeoutUS   = srpTimeoutUS
+                      srpTimeoutUS   = srpTimeoutUS,
+                      rssiBridge     = rssiBridge
                     )
   else:
     fixYaml    = None
