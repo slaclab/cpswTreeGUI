@@ -8,14 +8,18 @@ class CallbackHelper(pycpsw.AsyncIO):
     pycpsw.AsyncIO.__init__(self)
     self._real_callback = real_callback
 
-  def callback(self, arg):
+  def callback(self, *args):
     try:
-      if None != arg:
-        self._real_callback.callback(arg)
+      if None != args[0]:
+        self._real_callback.callback(args[0])
       else:
-        print("Error in callback -- Issuer:")
+        if len(args) > 1:
+          err = args[1]
+        else:
+          err = ""
+        print("Error in callback {}-- Issuer:".format(err))
+        print(self._real_callback.callbackIssuer())
   # FIXME: should reflect the timeout status in the GUI...
-  #     print(self._real_callback.callbackIssuer())
   #      sys.exit(1)
     except:
       print("Exception in callback -- Issuer:{}".format( self._real_callback.callbackIssuer() ) )
