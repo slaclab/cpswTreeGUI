@@ -1,3 +1,12 @@
+#@C Copyright Notice
+#@C ================
+#@C This file is part of cpswTreeGUI. It is subject to the license terms in the
+#@C LICENSE.txt file found in the top-level directory of this distribution and at
+#@C
+#@C https://confluence.slac.stanford.edu/display/ppareg/LICENSE.html.
+#@C
+#@C No part of cpswTreeGUI, including this file, may be copied, modified, propagated, or
+#@C distributed except according to the terms contained in the LICENSE.txt file.
 import yaml_cpp as yaml
 import cpswTreeGUI
 from   cpswAdaptBase     import *
