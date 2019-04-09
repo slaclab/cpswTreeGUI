@@ -17,17 +17,17 @@ cpswTreeGUI
 
 2. Launch with python
 
-     python cpswTreeGUI --help
+     python cpswTreeGUI.py --help
 
 3. Normal invocation requires path to YAML description and name
    of root node:
 
-     python cpswTreeGUI <myLocation>/000TopLevel.yaml NetIODev
+     python cpswTreeGUI.py <myLocation>/000TopLevel.yaml NetIODev
 
 4. Some definitions in YAML can be tweaked from the command line
    (most notably IP address of AMC carrier)
 
-     python cpswTreeGUI --ipAddress <myLocation>/000TopLevel.yaml NetIODev
+     python cpswTreeGUI.py --ipAddress <myLocation>/000TopLevel.yaml NetIODev
 
 5. In most cases the GUI should run on a Desktop without
    direct connectivity to the AMC Carrier. Read on for
