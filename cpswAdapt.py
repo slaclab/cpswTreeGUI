@@ -10,7 +10,7 @@
 import pycpsw
 from   cpswAdaptBase     import *
 import cpswTreeGUI
-from   PyQt4             import QtCore
+from   PyQt5             import QtCore
 
 class CallbackHelper(pycpsw.AsyncIO):
   def __init__(self, real_callback):

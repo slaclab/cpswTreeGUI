@@ -9,7 +9,6 @@
 #@C distributed except according to the terms contained in the LICENSE.txt file.
 import pycpsw
 import cpswTreeGUI
-from   PyQt4             import QtCore
 
 class AdaptBase:
   def __init__(self, obj):
