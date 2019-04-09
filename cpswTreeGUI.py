@@ -17,16 +17,16 @@ import re
 import os
 import sip
 sip.setapi('QString', 2)
-from   PyQt4                              import QtCore, QtGui
+from   PyQt5                              import QtCore, QtGui, QtWidgets
 import yaml_cpp
 import signal
 import array
 import numpy as np
 import matplotlib
-matplotlib.use("Qt4Agg")
+matplotlib.use("Qt5Agg")
 from   matplotlib.figure                  import Figure
-from   matplotlib.backends.backend_qt4agg import FigureCanvasQTAgg    as FigureCanvas
-from   matplotlib.backends.backend_qt4agg import NavigationToolbar2QT as NavigationToolbar
+from   matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg    as FigureCanvas
+from   matplotlib.backends.backend_qt5agg import NavigationToolbar2QT as NavigationToolbar
 import fixupYaml
 import cpswTreeGUI
 
@@ -52,7 +52,7 @@ class MyModel(QtCore.QAbstractItemModel):
   def __init__(self, rootPath, useEpics):
     self._app = QtCore.QCoreApplication.instance()
     if not self._app:
-      self._app = QtGui.QApplication([])
+      self._app = QtWidgets.QApplication([])
 
     QtCore.QAbstractItemModel.__init__(self)
     self._useEpics  = useEpics
@@ -60,8 +60,8 @@ class MyModel(QtCore.QAbstractItemModel):
     self._col0Width = 0
     self._root      = MyNode(self, Adapter.ChildAdapt(rootPath.origin()) )
 
-    self._tree      = QtGui.QTreeView()
-    QtCore.QObject.connect( self._poller, QtCore.SIGNAL("_signl()"), self.update )
+    self._tree      = QtWidgets.QTreeView()
+    self._poller._signl.connect( self.update )
     self._tree.setModel( self )
     self._tree.setRootIndex( QtCore.QAbstractItemModel.createIndex( self, 0, 0, self._root ) )
     self._tree.setRootIsDecorated( True )
@@ -69,18 +69,18 @@ class MyModel(QtCore.QAbstractItemModel):
     self._tree.setMinimumSize(1000, 800)
     # Context Menu for Tree View
     self._tree.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
-    self._treeMenu = QtGui.QMenu()
+    self._treeMenu = QtWidgets.QMenu()
     if not self._useEpics:
-      loadAction = QtGui.QAction("Load from file...", self)
+      loadAction = QtWidgets.QAction("Load from file...", self)
       loadAction.triggered.connect(self.loadFromFile)
       self._treeMenu.addAction(loadAction)
-    pathAction = QtGui.QAction("Copy 'Path' to clipboard...", self)
+    pathAction = QtWidgets.QAction("Copy 'Path' to clipboard...", self)
     pathAction.triggered.connect(self.copyPathToClipboard)
     self._treeMenu.addAction(pathAction)
     self._tree.customContextMenuRequested.connect(self.openMenu)
 
     #QtCore.QObject.connect( self._tree.selectionModel(), QtCore.SIGNAL('selectionChanged(QItemSelection, QItemSelection)'), test)
-    QtCore.QObject.connect( self._tree, QtCore.SIGNAL('clicked(QModelIndex)'), test1)
+    self._tree.clicked.connect(test1)
     self._tree.installEventFilter( RightPressFilter() )
     self._tree.setDragEnabled(True)
     self._tree.show()
@@ -93,20 +93,20 @@ class MyModel(QtCore.QAbstractItemModel):
             self._treeMenu.exec_(self._tree.viewport().mapToGlobal(position))
 
   def loadFromFile(self):
-    yaml_file = QtGui.QFileDialog.getOpenFileName(None, 'Open File...', './', 'CPSW Defaults (*.yaml)')
+    yaml_file = QtWidgets.QFileDialog.getOpenFileName(None, 'Open File...', './', 'CPSW Defaults (*.yaml)')
     yaml_file = yaml_file[0] if isinstance(yaml_file, (list, tuple)) else yaml_file
     if yaml_file:
         yaml_file = str(yaml_file)
         my_node = self._tree.selectedIndexes()[0].internalPointer()
         path = my_node.buildPath()
         try:
-            msg = QtGui.QMessageBox()
-            msg.setIcon(QtGui.QMessageBox.Question)
+            msg = QtWidgets.QMessageBox()
+            msg.setIcon(QtWidgets.QMessageBox.Question)
             msg.setText("Are you sure you want to load the yaml file:\n{}\nat:\n {}".format(yaml_file, path))
-            msg.setStandardButtons(QtGui.QMessageBox.Yes | QtGui.QMessageBox.No)
-            msg.setDefaultButton(QtGui.QMessageBox.No)
+            msg.setStandardButtons(QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No)
+            msg.setDefaultButton(QtWidgets.QMessageBox.No)
             ret = msg.exec_()
-            if ret == QtGui.QMessageBox.No:
+            if ret == QtWidgets.QMessageBox.No:
                 return
             path.loadConfigFromYamlFile(yaml_file)
         except Exception as ex:
@@ -115,7 +115,7 @@ class MyModel(QtCore.QAbstractItemModel):
 
   def copyPathToClipboard(self):
     my_node = self._tree.selectedIndexes()[0].internalPointer()
-    QtGui.QApplication.clipboard().setText( my_node.getConnectionName() )
+    QtWidgets.QApplication.clipboard().setText( my_node.getConnectionName() )
 
   def setCol0Width(self, width):
     self._col0Width = width
@@ -218,13 +218,13 @@ class MyModel(QtCore.QAbstractItemModel):
     return QtCore.QModelIndex()
 
 # Action which emits itself
-class ActAction(QtGui.QAction):
+class ActAction(QtWidgets.QAction):
 
-  _signal = QtCore.pyqtSignal(QtGui.QAction)
+  _signal = QtCore.pyqtSignal(QtWidgets.QAction)
 
   def __init__(self, name, parent=None):
-    QtGui.QAction.__init__(self, name, parent)
-    QtCore.QObject.connect(self, QtCore.SIGNAL("triggered()"), self)
+    QtWidgets.QAction.__init__(self, name, parent)
+    self.triggered.connect( self )
 
   def __call__(self):
     self._signal.emit(self)
@@ -232,12 +232,12 @@ class ActAction(QtGui.QAction):
   def connect(self, slot):
     self._signal.connect( slot )
 
-class EnumButt(QtGui.QPushButton):
+class EnumButt(QtWidgets.QPushButton):
   def __init__(self, var, parent = None):
-    QtGui.QPushButton.__init__(self, parent)
+    QtWidgets.QPushButton.__init__(self, parent)
     self._var = var
     if not var.isReadOnly():
-      menu          = QtGui.QMenu()
+      menu          = QtWidgets.QMenu()
       for item in self._var.getEnumItems():
         a = ActAction( item[0], self )
         a.connect( self.activated )
@@ -299,12 +299,12 @@ class IfObj(QtCore.QObject):
   def getConnectionName(self):
     return self._commHdl.getConnectionName()
 
-class LineEditWrapper(QtGui.QLineEdit):
+class LineEditWrapper(QtWidgets.QLineEdit):
   def __init__(self, parent=None):
-    QtGui.QLineEdit.__init__(self, parent)
+    QtWidgets.QLineEdit.__init__(self, parent)
 
   def setText(self, txt):
-    QtGui.QLineEdit.setText(self, txt)
+    QtWidgets.QLineEdit.setText(self, txt)
     self.home( False )
 
 class ScalVal(IfObj):
@@ -332,15 +332,15 @@ class ScalVal(IfObj):
       if not readOnly:
         if not self.commHdl().isString():
           if self.commHdl().isFloat():
-            validator = QtGui.QDoubleValidator()
+            validator = QtWidgets.QDoubleValidator()
           else:
             validator = ScalValidator( self )
           widgt.setValidator( validator )
         # returnPressed is only emitted if the string passes validation
-        QtCore.QObject.connect( widgt, QtCore.SIGNAL("returnPressed()"),   self.updateVal )
+        widgt.returnPressed.connect( self.updateVal )
         # editingFinished is emitted after returnPressed or lost focus (with valid string)
         # if we lose focus w/o return being hit then we restore the original string
-        QtCore.QObject.connect( widgt, QtCore.SIGNAL("editingFinished()"), self.restoreTxt  )
+        widgt.editingFinished.connect( self.restoreTxt  )
     self.setWidget(widgt)
     self._cachedVal = None;
     self.updateTxt( self._cachedVal )
@@ -376,7 +376,7 @@ class ScalVal(IfObj):
   # read ScalVal and update text -- unless the user is in the process of editing
   #
   # THIS IS EXECUTED IN THE EVENT LOOP BY THE MAIN THREAD
-  @QtCore.pyqtSlot(int)
+  @QtCore.pyqtSlot(object)
   def updateTxt(self, newVal):
     if newVal == None:
       strVal = "???"
@@ -439,8 +439,8 @@ class ScalVal(IfObj):
 class Cmd(IfObj):
   def __init__(self, path, node, widget_index ):
     IfObj.__init__(self, path.createCmd())
-    button    = QtGui.QPushButton("Execute")
-    QtCore.QObject.connect(button, QtCore.SIGNAL('clicked(bool)'), self)
+    button    = QtWidgets.QPushButton("Execute")
+    button.clicked.connect( self )
     self.setWidget( button )
 
   def __call__(self):
@@ -632,9 +632,9 @@ class MyNode(object):
                 raise
             else:
               if nelms > 1:
-                widgt = QtGui.QLabel("<Arrays or Interface not supported>")
+                widgt = QtWidgets.QLabel("<Arrays or Interface not supported>")
               else:
-                widgt = QtGui.QLabel("<No known Interface supported>")
+                widgt = QtWidgets.QLabel("<No known Interface supported>")
             tree.setIndexWidget( widget_index, widgt )
       # calculate necessary space for indentation
       depth = 0
@@ -710,8 +710,8 @@ class Stream(IfObj):
     self._fig    = Figure([2,2])
     self._canvas = FigureCanvas( self._fig )
     toolbar      = NavigationToolbar( self._canvas, None )
-    box          = QtGui.QWidget()
-    layout       = QtGui.QVBoxLayout()
+    box          = QtWidgets.QWidget()
+    layout       = QtWidgets.QVBoxLayout()
     layout.addWidget(self._canvas )
     layout.addWidget( toolbar )
     box.setLayout( layout )
@@ -723,7 +723,7 @@ class Stream(IfObj):
     plot_index = model.index(0, 1, widget_index)
     model.getTree().setIndexWidget( plot_index, box )
     # our regular widget is just empty
-    self.setWidget( QtGui.QLabel("") )
+    self.setWidget( QtWidgets.QLabel("") )
     Stream._bufs.append( self._buf )
     Stream._strms.append( self )
     self.plot( 100 )
@@ -966,6 +966,7 @@ def main1(oargs):
   else:
     fixYaml    = None
     yamlIncDir = None
+  app      = QtWidgets.QApplication(args)
   return startGUI(yamlFile, yamlRoot, useEpics, disableCPSW, fixYaml, yamlIncDir)
 
 def startGUI(yamlFile, yamlRoot, useEpics=False, disableCPSW=False, fixYaml=None, yamlIncDir=None):
