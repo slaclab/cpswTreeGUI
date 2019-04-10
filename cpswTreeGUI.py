@@ -47,6 +47,8 @@ _HashedNameLenMax = 40
 _RecordNamePrefix = ""
 _HashPrefix       = os.getenv("YCPSWASYN_HASH_PREFIX","")
 
+_disableStreams   = False
+
 class MyModel(QtCore.QAbstractItemModel):
 
   def __init__(self, rootPath, useEpics):
@@ -618,7 +620,10 @@ class MyNode(object):
             widget_index = self._model.index(row - 1, 1, mindex)
             childPath    = path.findByName( childName )
             # Check
-            IFs = [ ScalVal, Cmd, Stream ]
+            if _disableStreams:
+              IFs = [ ScalVal, Cmd ]
+            else:
+              IFs = [ ScalVal, Cmd, Stream ]
             for IF in IFs:
               try:
                 ifObj = IF( childPath, childNode, widget_index )
@@ -756,10 +761,10 @@ class RightPressFilter(QtCore.QObject):
     return super(RighPressFilter, self).eventFilter(obj, event)
 
 def main1(oargs):
+  global _disableStreams
 
   useTcp         = False
   srpV2          = False
-  disableStreams = False
   ipAddr         = None
   disableDepack  = False
   portMaps       = []
@@ -807,7 +812,7 @@ def main1(oargs):
     elif opt[0] in ('-B', '--backdoor') and not useEpics:
       backDoor       = True
     elif opt[0] in ('-s', '--disableStreams'):
-      disableStreams = True
+      _disableStreams = True
     elif opt[0] in ('--disableStringHeuristics'):
       strHeuristic   = False
     elif opt[0] in ('-C', '--disableComm'):
@@ -912,9 +917,9 @@ def main1(oargs):
     StringHeuristics.disable()
 
   if backDoor:
-    srpV2          = True
-    disableStreams = True
-    disableDepack  = True
+    srpV2           = True
+    _disableStreams = True
+    disableDepack   = True
     if len(portMaps) > 1:
       portMaps = [ portMaps[0] ]
     if len(portMaps) == 1:
@@ -948,13 +953,13 @@ def main1(oargs):
 
   if not disableCPSW:
     if useEpics:
-      disableComm    = True
+      disableComm     = True
     elif disableComm:
-      disableStreams = True
+      _disableStreams = True
     fixYaml       = fixupYaml.Fixup(
                       useTcp         = useTcp,
                       srpV2          = srpV2,
-                      disableStreams = disableStreams,
+                      disableStreams = _disableStreams,
                       ipAddr         = ipAddr,
                       disableDepack  = disableDepack,
                       portMaps       = portMaps,
