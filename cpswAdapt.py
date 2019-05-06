@@ -11,6 +11,7 @@ import pycpsw
 from   cpswAdaptBase     import *
 import cpswTreeGUI
 from   PyQt4             import QtCore
+import threading
 
 class CallbackHelper(pycpsw.AsyncIO):
   def __init__(self, real_callback):
@@ -69,6 +70,8 @@ class VarAdapt(VarAdaptBase):
 
   def __init__(self, var, readOnly, reprType):
     VarAdaptBase.__init__(self, var, readOnly, reprType)
+    self._busy = False
+    self._lock = threading.Lock()
 
   def setVal(self, val, fromIdx = -1, toIdx = -1):
     self.obj().setVal( val, fromIdx=fromIdx, toIdx=toIdx )
@@ -78,11 +81,18 @@ class VarAdapt(VarAdaptBase):
     self._cbHelper  = CallbackHelper( self )
 
   def getValAsync(self):
-    self.obj().getValAsync( self._cbHelper )
+    # must not re-use '_cbHelper' (the AsyncIO) object
+    # whild still in flight!
+    with self._lock:
+      if not self._busy:
+        self._busy = True
+        self.obj().getValAsync( self._cbHelper )
 
   # Called by Async IO Completion
   def callback(self, value):
     self._widgt.asyncUpdateWidget( value )
+    # no need for lock here
+    self._busy = False
 
   def needPoll(self):
     return True
