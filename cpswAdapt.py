@@ -87,6 +87,9 @@ class VarAdapt(VarAdaptBase):
   def needPoll(self):
     return True
 
+  def callbackIssuer(self):
+    return self.obj().callbackIssuer()
+
 class CmdAdapt(AdaptBase):
   def __init__(self, cmd):
     AdaptBase.__init__(self, cmd)
