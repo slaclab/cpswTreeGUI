@@ -43,7 +43,7 @@ class Fixup(pycpsw.YamlFixup):
     return self._justLoadYaml
 
   def ok(self,node):
-    return node != None and node.IsDefined()
+    return node != None and node.IsDefined() and not node.IsNull()
 
   def edit(self, node, l, editPass):
     if editPass == 0:
