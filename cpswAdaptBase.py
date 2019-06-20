@@ -107,7 +107,11 @@ class PathAdaptBase:
 
   @staticmethod
   def loadYamlFile(yamlFile, yamlRoot, yamlIncDir = None, fixYaml = None):
-    return pycpsw.Path.loadYamlFile(yamlFile, yamlRoot, yamlIncDir, fixYaml)
+    try:
+      return pycpsw.Path.loadYamlFile(yamlFile, yamlRoot, yamlIncDir, fixYaml)
+    except pycpsw.CPSWError as e:
+      print(e.what())
+      raise
 
   def __init__(self,p):
     self._path = p
