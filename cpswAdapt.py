@@ -129,7 +129,7 @@ class PathAdapt(PathAdaptBase):
     PathAdaptBase.__init__(self, p)
 
   def loadConfigFromYamlFile(self, yaml_file):
-    pycpsw.Path.loadConfigFromYamlFile(self._path, yaml_file)
+    return pycpsw.Path.loadConfigFromYamlFile(self._path, yaml_file)
 
   def guessRepr(self, svb=None):
     rval = PathAdaptBase.guessRepr(self, svb)
