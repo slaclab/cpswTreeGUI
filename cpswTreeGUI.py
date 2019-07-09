@@ -104,7 +104,7 @@ class MyModel(QtCore.QAbstractItemModel):
         try:
             msg = QtWidgets.QMessageBox()
             msg.setIcon(QtWidgets.QMessageBox.Question)
-            msg.setText("Are you sure you want to load the yaml file:\n{}\nat:\n {}".format(yaml_file, path))
+            msg.setText("Are you sure you want to load the yaml file:\n{}\nat:\n {}".format(yaml_file, path.toString()))
             msg.setStandardButtons(QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No)
             msg.setDefaultButton(QtWidgets.QMessageBox.No)
             ret = msg.exec_()
