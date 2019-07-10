@@ -591,7 +591,7 @@ class MyNode(object):
       for child in self._hub.getChildren():
         childHub = child.isHub()
         nelms    = child.getNelms()
-        leafmax  = 16 # max. to expand leaf children
+        leafmax  = 1024 # max. to expand leaf children
         nexpand  = nelms
         if nelms > 1:
           # could be a string -- in this case we wouldn't want to expand
