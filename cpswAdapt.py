@@ -98,7 +98,7 @@ class VarAdapt(VarAdaptBase):
     return True
 
   def callbackIssuer(self):
-    return self.obj().callbackIssuer()
+    return self.getConnectionName()
 
 class CmdAdapt(AdaptBase):
   def __init__(self, cmd):
