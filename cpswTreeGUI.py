@@ -110,7 +110,9 @@ class MyModel(QtCore.QAbstractItemModel):
             ret = msg.exec_()
             if ret == QtWidgets.QMessageBox.No:
                 return
-            path.loadConfigFromYamlFile(yaml_file)
+            print("Loading configuration file '{}' at path '{}'...".format(yaml_file, path.toString()))
+            loaded_entries = path.loadConfigFromYamlFile(yaml_file)
+            print("Done! {} entries were loaded.".format(loaded_entries))
         except Exception as ex:
             print("Error while loading config from YAML file.")
             print("Exception: ", ex)
