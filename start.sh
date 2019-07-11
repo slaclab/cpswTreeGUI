@@ -271,7 +271,7 @@ if [ -z ${fpga_ip+x} ]; then
     echo "Calculating FPGA IP address..."
     fpga_ip=$(getFpgaIp)
 else
-    echo "IP address was defined. Ignoring shelfmanager and slot number. FW version checking disabled."
+    echo "IP address was defined. Ignoring shelfmanager and slot number."
 fi
 echo "FPGA IP: ${fpga_ip}"
 echo
