@@ -38,7 +38,7 @@ clean_up()
     echo "Cleaning up..."
 
     # Kill the screen session
-    if [ ${screen_session_name+x} ]; then
+    if [ ${screen_session_started+x} ]; then
         echo "Killing screen session in remote CPU..."
         ssh ${cpu_user}@${cpu} screen -X -S ${screen_session_name}  quit
         echo "Done"
@@ -286,15 +286,27 @@ echo "Connection OK."
 echo
 
 # Check if a rssi_bridge is already running in the remote cpu
-if [ $(ssh ${cpu_user}@${cpu} ps -ef | grep rssi_bridge | grep ${fpga_ip} | wc -l)  != 0 ]; then
-  echo "An RSSI bridge is already running on ${cpu}, connected to ${fpga_ip}..."
+screen_session_name=rssi_bridge_${fpga_ip}
+echo "Verifying is a screen session '${screen_session_name}' is already running in '${cpu}'..."
+if [ $(ssh ${cpu_user}@${cpu} screen -ls | grep ${screen_session_name} | wc -l) != 0 ]; then
+  echo "Yes, a screen session '${screen_session_name}' is already running in '${cpu}'. Aborting..."
 else
   # Start the rssi_bridge in a screen session in the remote CPU
-  screen_session_name=rssi_bridge_${fpga_ip}
+  echo "No screen session was found. Starting a new screen session..."
   ssh ${cpu_user}@${cpu} screen -dmS ${screen_session_name} -h 8192 ${rssi_bridge_bin} -a ${fpga_ip} -p 8193 -p 8194 -v
+  screen_session_started=yes
 
-  # Start the cpswTreeGui
-  . env.slac.sh && python3 cpswTreeGUI.py --ipAddr ${fpga_ip} --rssiBridge=${cpu} ${yaml} NetIODev
+  # Verifying if the screen session is running
+  if [ $(ssh ${cpu_user}@${cpu} screen -ls | grep ${screen_session_name} | wc -l) == 0 ]; then
+    echo "Failed to start the rssi_bridge. Is there already a rssi_bidge running in '${cpu}'?"
+  else
+    echo "Done!. The rssi_bridge is now running in '${cpu}' in the screen session '${screen_session_name}'"
+    echo
+
+    # Start the cpswTreeGui
+    echo "Starting the GUI..."
+    . env.slac.sh && python3 cpswTreeGUI.py --ipAddr ${fpga_ip} --rssiBridge=${cpu} ${yaml} NetIODev
+  fi
 fi
 
 # Clean up system and exit
