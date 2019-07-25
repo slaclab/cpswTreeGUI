@@ -153,12 +153,15 @@ case ${key} in
     ;;
     -c|--cpu)
     cpu="$2"
+    shift
     ;;
     -y|--yaml)
     yaml="$2"
+    shift
     ;;
     -t|--tar)
     tar="$2"
+    shift
     ;;
     -h|--help)
     usage
