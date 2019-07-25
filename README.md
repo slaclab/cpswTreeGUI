@@ -132,8 +132,9 @@ desktop and the rssi_bridge on a remote CPU with a single command.
 
 ```
 usage: start.sh [-S|--shelfmanager <shelfmanager_name> -N|--slot <slot_number>]
-                      [-a|--addr <FPGA_IP>] -c|--cpu <cpu_name> [-y|--yaml <YAML_file>]
-                      [-t|--tar <tarball_file>]
+                [-a|--addr <FPGA_IP>] -c|--cpu <cpu_name> [-y|--yaml <YAML_file>]
+                [-t|--tar <tarball_file>]
+
     -S|--shelfmanager <shelfmanager_name> : ATCA shelfmanager node name or IP address. Must be used with -N.
     -N|--slot         <slot_number>       : ATCA crate slot number. Must be used with -S.
     -a|--addr         <FPGA_IP>           : FPGA IP address. If defined, -S and -N are ignored.
