@@ -51,12 +51,13 @@ _disableStreams   = False
 
 class MyModel(QtCore.QAbstractItemModel):
 
-  def __init__(self, rootPath, useEpics):
+  def __init__(self, rootPath, useEpics, maxExpandedLeaves):
     self._app = QtCore.QCoreApplication.instance()
     if not self._app:
       self._app = QtWidgets.QApplication([])
 
     QtCore.QAbstractItemModel.__init__(self)
+    self._maxExpand = maxExpandedLeaves
     self._useEpics  = useEpics
     self._poller    = Poller(1000)
     self._col0Width = 0
@@ -179,6 +180,9 @@ class MyModel(QtCore.QAbstractItemModel):
 
   def getTree(self):
     return self._tree
+
+  def getMaxExpandedLeaves(self):
+    return self._maxExpand
 
   def rowCount(self, mindex):
     if mindex.isValid():
@@ -591,7 +595,7 @@ class MyNode(object):
       for child in self._hub.getChildren():
         childHub = child.isHub()
         nelms    = child.getNelms()
-        leafmax  = 1024 # max. to expand leaf children
+        leafmax  = self._model.getMaxExpandedLeaves()
         nexpand  = nelms
         if nelms > 1:
           # could be a string -- in this case we wouldn't want to expand
@@ -765,20 +769,21 @@ class RightPressFilter(QtCore.QObject):
 def main1(oargs):
   global _disableStreams
 
-  useTcp         = False
-  srpV2          = False
-  ipAddr         = None
-  disableDepack  = False
-  portMaps       = []
-  backDoor       = False
-  strHeuristic   = True
-  useEpics       = False
-  disableComm    = False
-  disableCPSW    = False
-  justLoadYaml   = False
-  srpTimeoutUS   = "5000000"
-  rssiBridge     = None
-  socksProxy     = None
+  useTcp            = False
+  srpV2             = False
+  ipAddr            = None
+  disableDepack     = False
+  portMaps          = []
+  backDoor          = False
+  strHeuristic      = True
+  useEpics          = False
+  disableComm       = False
+  disableCPSW       = False
+  justLoadYaml      = False
+  srpTimeoutUS      = "5000000"
+  rssiBridge        = None
+  socksProxy        = None
+  maxExpandedLeaves = 16
 
   ( opts, args ) = getopt.getopt(
                       oargs[1:],
@@ -796,6 +801,7 @@ def main1(oargs):
                        "useEpics",
                        "useEpicsOnly",
                        "srpTimeoutUS=",
+                       "maxExpandedLeaves=",
                        "tcp",
                        "help"] )
 
@@ -827,6 +833,12 @@ def main1(oargs):
       socksProxy     = opt[1]
     elif opt[0] in ('--justLoadYaml'):
       justLoadYaml   = True
+    elif opt[0] in ('--maxExpandedLeaves'):
+      try:
+        maxExpandedLeaves = int(opt[1])
+      except:
+        print("Invalid value for --maxExpandedLeaves -- must be an integer number")
+        sys.exit(1)
     elif opt[0] in ('--srpTimeoutUS'):
       try:
         int(opt[1])
@@ -891,6 +903,8 @@ def main1(oargs):
         print("                                 this default.")
         print("                                 NOTE: the timeout must be specified in micro-seconds!")
         print("    --tcp                      : same as -T (DEPRECATED: use --rssiBridge")
+        print("    --maxExpandedLeaves <max>  : If leaves in the tree are arrays then individual elements")
+        print("                                 are not shown if the array has more than <max> elements")
       else:
         print("Usage: {} --useEpics|--useEpicsOnly [--record-prefix=prefix] [--help] yaml_file [root_node]".format(oargs[0]))
         print()
@@ -909,6 +923,8 @@ def main1(oargs):
         print("                                 NOTE: this requires the EPICS client to be patched for SOCKS;")
         print("                                 consult 'http://slac.stanford.edu/~strauman/epics/caxy/' for")
         print("                                 more information.")
+        print("    --maxExpandedLeaves <max>  : If leaves in the tree are arrays then individual elements")
+        print("                                 are not shown if the array has more than <max> elements")
         print("  ENVIRONMENT:")
         print("")
         print("    YCPSWASYN_HASH_PREFIX      : Defines the hash prefix (must match prefix used on the IOC!).")
@@ -974,9 +990,9 @@ def main1(oargs):
     fixYaml    = None
     yamlIncDir = None
   app      = QtWidgets.QApplication(args)
-  return startGUI(yamlFile, yamlRoot, useEpics, disableCPSW, fixYaml, yamlIncDir)
+  return startGUI(yamlFile, yamlRoot, useEpics, disableCPSW, fixYaml, yamlIncDir, maxExpandedLeaves)
 
-def startGUI(yamlFile, yamlRoot, useEpics=False, disableCPSW=False, fixYaml=None, yamlIncDir=None):
+def startGUI(yamlFile, yamlRoot, useEpics=False, disableCPSW=False, fixYaml=None, yamlIncDir=None, maxExpandedLeaves=16):
   if useEpics:
     if None == fixYaml and not disableCPSW:
       fixYaml = fixupYaml.Fixup( disableComm = True )
@@ -995,7 +1011,7 @@ def startGUI(yamlFile, yamlRoot, useEpics=False, disableCPSW=False, fixYaml=None
   if None != fixYaml and fixYaml.getJustLoadYaml():
     return None
   signal.signal( signal.SIGINT, signal.SIG_DFL )
-  modl  = MyModel( rp, useEpics )
+  modl  = MyModel( rp, useEpics, maxExpandedLeaves )
   app   = QtCore.QCoreApplication.instance()
   return (modl, app, rp)
 

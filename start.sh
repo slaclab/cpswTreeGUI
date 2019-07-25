@@ -163,6 +163,10 @@ case ${key} in
     tar="$2"
     shift
     ;;
+    -L|--maxExpandedLeaves)
+    maxleaves="--maxExpandedLeaves=$2"
+    shift
+    ;;
     -h|--help)
     usage
     exit 0
@@ -308,7 +312,7 @@ else
 
     # Start the cpswTreeGui
     echo "Starting the GUI..."
-    . env.slac.sh && python3 cpswTreeGUI.py --ipAddr ${fpga_ip} --rssiBridge=${cpu} ${yaml} NetIODev
+    . env.slac.sh && python3 cpswTreeGUI.py --ipAddr ${fpga_ip} --rssiBridge=${cpu} ${maxleaves} ${yaml} NetIODev
   fi
 fi
 
