@@ -3,7 +3,7 @@
 ###############
 # Definitions #
 ###############
-# CPSW framework version. Extarct it from the env.slac.sh script so 
+# CPSW framework version. Extract it from the env.slac.sh script so
 # we don't have to write it twice.
 cpsw_framework_version=$(grep cpsw/framework env.slac.sh | head -n 1 | sed -r 's|.+/framework/([^/]+)/.*|\1|')
 

@@ -18,7 +18,7 @@ class AdaptBase:
     return self._obj
 
   def getDescription(self):
-    return self._obj.getDescription() 
+    return self._obj.getDescription()
 
   def getConnectionName(self):
     return self._obj.getPath().toString()

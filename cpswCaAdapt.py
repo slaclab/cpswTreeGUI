@@ -65,7 +65,7 @@ class VarAdapt(VarAdaptBase, CAAdaptBase):
     if not svb.isSigned() and not self.hasEnums():
       self.signoff_ = 1 << svb.getSizeBits()
 
-    
+
     if not readOnly:
       self._pvw     = epics.get_pv(self.path().hash("St"), connection_timeout=0.0)
     print("Made PV: '{}' -- type '{}'".format(self.hnam(), self.pv().type))
@@ -148,7 +148,7 @@ class PathAdapt(PathAdaptBase):
     raise cpswTreeGUI.InterfaceNotImplemented("Streams not implemented")
 
   def getFull(self, suff=""):
-   	return cpswTreeGUI._HashPrefix + self.toString() + suff 
+   	return cpswTreeGUI._HashPrefix + self.toString() + suff
 
   def hash(self, suff):
     namLim     = cpswTreeGUI._HashedNameLenMax

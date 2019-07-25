@@ -67,7 +67,7 @@ class Fixup(pycpsw.YamlFixup):
     cl = node["class"]
     if self.ok(cl) and cl.Scalar() == "NetIODev":
       if self._noComm or self._justLoadYaml:
-        cl.set( "NullDev" )  
+        cl.set( "NullDev" )
       if None != ipAddr:
         ip = self.find(node, "ipAddr")
         if not self.ok(ip):
@@ -83,7 +83,7 @@ class Fixup(pycpsw.YamlFixup):
         if editPass > 0:
           raise RuntimeError("FOO")
         return
-  
+
       children = node["children"]
       if not self.ok(children):
         raise RuntimeError("No NetIODev children found")
@@ -187,7 +187,7 @@ class Fixup(pycpsw.YamlFixup):
       return None
     node = res[0]
     return node
-    
+
   def findWithPath(self, node, name):
     l   = []
     for part in name.split("/"):
@@ -219,7 +219,7 @@ class Fixup(pycpsw.YamlFixup):
       node = res[0][0]
       l.extend(res[0][1])
     return (node, l, res[0][2])
-  
+
   def findNod(self, node, name, l, res):
     if node.IsMap():
       fnd = node[name]

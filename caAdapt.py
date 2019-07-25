@@ -44,7 +44,7 @@ class StreamAdapt(AdaptBase):
 class VarAdapt(AdaptBase):
 
   def __init__(self, path, readOnly, reprType, hasEnum):
-    AdaptBase.__init__(self, path, ":Rd") 
+    AdaptBase.__init__(self, path, ":Rd")
 
     if not readOnly:
       self._pvw     = epics.get_pv(self.hnam()+":St")
@@ -151,7 +151,7 @@ class PathAdapt:
   def toString(self):
     s = ""
     for i in self._p[1:]:
-      s = s + "/" + i[0] 
+      s = s + "/" + i[0]
     return s
 
   def findByName(self, ell):
@@ -194,7 +194,7 @@ class PathAdapt:
     hnam = cpswTreeGUI._RecordNamePrefix+sha1( bytearray( (hashPrefix + self.toString()), "ascii" ) ).hexdigest().upper()
     hnam = hnam[0:cpswTreeGUI._HashedNameLenMax]
     return hnam
- 
+
 class ChildAdapt:
   def __init__(self, chldp):
     self._chldp = chldp
