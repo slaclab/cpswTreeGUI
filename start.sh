@@ -79,7 +79,7 @@ usage()
     echo "The YAML file must be specified either pointing to a top level file (usually called 000TopLevel.yaml) using -y|--yaml, or a tarball file containing"
     echo "all the YAML files, using -t|--tar. If -y is used, -t is ignored."
     echo
-    echo "The scrip will start the rssi_bridge in the remote CPU inside a screen session called 'rssi_bridge_<FPGA_IP>'. Then it will start the cpswTreeGUI here"
+    echo "The script will start the rssi_bridge in the remote CPU inside a screen session called 'rssi_bridge_<FPGA_IP>'. Then it will start the cpswTreeGUI here"
     echo "When the GUI is closed, the remote screen session will be automatically killed."
     echo "The script will check if an rssi_bridge is already running in the remote CPU connected to the specified FGPA_IP. Also, it will check if the CPU and FPGA"
     echo "are online."
