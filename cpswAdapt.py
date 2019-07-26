@@ -95,7 +95,7 @@ class VarAdapt(VarAdaptBase):
     self._busy = False
 
   def needPoll(self):
-    return True
+    return True, self.obj().getPollSecs()
 
   def callbackIssuer(self):
     return self.getConnectionName()

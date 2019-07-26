@@ -353,9 +353,13 @@ class ScalVal(IfObj):
     self._cachedVal = None;
     self.updateTxt( self._cachedVal )
     self._sig.connect( self.updateTxt )
-    if self.commHdl().needPoll():
-      node._model.addPoll( self )
+    needPoll, pollSecs = self.commHdl().needPoll()
     self.commHdl().setWidget( self )
+    if needPoll:
+      if 0.0 == pollSecs:
+        self.commHdl().getValAsync()
+      else:
+        node._model.addPoll( self )
 
   def getVar(self):
     return self.commHdl()

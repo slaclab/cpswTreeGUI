@@ -72,7 +72,7 @@ class VarAdaptBase(AdaptBase):
     return self.obj().getPath().toString()
 
   def needPoll(self):
-    return False
+    return False, 0
 
 class ChildAdaptBase:
   def __init__(self, entry):
