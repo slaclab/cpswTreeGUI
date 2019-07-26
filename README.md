@@ -130,9 +130,11 @@ Automated script to start cpswTreeGUI with rssi_bridge at SLAC
 The provided 'start.sh' script can be used to start cpswTreeGUI on a
 desktop and the rssi_bridge on a remote CPU with a single command.
 
+```
 usage: start.sh [-S|--shelfmanager <shelfmanager_name> -N|--slot <slot_number>]
-                      [-a|--addr <FPGA_IP>] -c|--cpu <cpu_name> [-y|--yaml <YAML_file>]
-                      [-t|--tar <tarball_file>]
+                [-a|--addr <FPGA_IP>] -c|--cpu <cpu_name> [-y|--yaml <YAML_file>]
+                [-t|--tar <tarball_file>]
+
     -S|--shelfmanager <shelfmanager_name> : ATCA shelfmanager node name or IP address. Must be used with -N.
     -N|--slot         <slot_number>       : ATCA crate slot number. Must be used with -S.
     -a|--addr         <FPGA_IP>           : FPGA IP address. If defined, -S and -N are ignored.
@@ -140,6 +142,7 @@ usage: start.sh [-S|--shelfmanager <shelfmanager_name> -N|--slot <slot_number>]
     -y|--yaml         <YAML_file>         : Path to the top level YAML file.If defined, -t will be ignored.
     -t|--tar          <tarball_file>      : Path to the YAML tarball file. Must be defined is -y is not defined.
     -h|--help                             : Show this message.
+```
 
 If -a if not defined, then -S and -N must both be defined, and the
 FPGA IP address will be automatically  calculated from the crate ID
