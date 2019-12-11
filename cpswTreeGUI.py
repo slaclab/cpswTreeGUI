@@ -18,6 +18,7 @@ import os
 import sip
 sip.setapi('QString', 2)
 from   PyQt5                              import QtCore, QtGui, QtWidgets
+from   PyQt5.QtGui                        import QDoubleValidator
 import yaml_cpp
 import signal
 import array
@@ -340,7 +341,7 @@ class ScalVal(IfObj):
       if not readOnly:
         if not self.commHdl().isString():
           if self.commHdl().isFloat():
-            validator = QtWidgets.QDoubleValidator()
+            validator = QDoubleValidator()
           else:
             validator = ScalValidator( self )
           widgt.setValidator( validator )
