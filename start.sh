@@ -3,9 +3,16 @@
 ###############
 # Definitions #
 ###############
-# CPSW framework version. Extract it from the env.slac.sh script so
+
+# TOP directory
+top_dir=$(dirname -- "$(readlink -f $0)")
+
+# Environment setup script
+env_setup=${top_dir}/env.slac.sh
+
+# CPSW framework version. Extract it from the environment setup script so
 # we don't have to write it twice.
-cpsw_framework_version=$(grep cpsw/framework env.slac.sh | head -n 1 | sed -r 's|.+/framework/([^/]+)/.*|\1|')
+cpsw_framework_version=$(grep cpsw/framework ${env_setup} | head -n 1 | sed -r 's|.+/framework/([^/]+)/.*|\1|')
 
 # Remote CPU architecture
 cpu_arch=buildroot-2016.11.1-x86_64
@@ -323,7 +330,7 @@ else
 
     # Start the cpswTreeGui
     echo "Starting the GUI..."
-    . env.slac.sh && python3 cpswTreeGUI.py --ipAddr ${fpga_ip} --rssiBridge=${cpu} ${maxleaves} ${disable_streams} ${yaml} NetIODev
+    . ${env_setup} && python3 ${top_dir}/cpswTreeGUI.py --ipAddr ${fpga_ip} --rssiBridge=${cpu} ${maxleaves} ${disable_streams} ${yaml} NetIODev
   fi
 fi
 
