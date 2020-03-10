@@ -14,14 +14,8 @@ env_setup=${top_dir}/env.slac.sh
 # we don't have to write it twice.
 cpsw_framework_version=$(grep cpsw/framework ${env_setup} | head -n 1 | sed -r 's|.+/framework/([^/]+)/.*|\1|')
 
-# Remote CPU architecture
-cpu_arch=buildroot-2016.11.1-x86_64
-
 # Remote CPU user
 cpu_user=laci
-
-# rssi_bridge binary
-rssi_bridge_bin=$PACKAGE_TOP/cpsw/framework/${cpsw_framework_version}/${cpu_arch}/bin/rssi_bridge
 
 # Shell PID
 top_pid=$$
@@ -94,7 +88,7 @@ usage()
     echo "The script will check if an rssi_bridge is already running in the remote CPU connected to the specified FGPA_IP. Also, it will check if the CPU and FPGA"
     echo "are online."
     echo
-    echo "Currently, the remote CPU supported are only linuxRT CPUs running '${cpu_arch}', and using the user '${cpu_user}'."
+    echo "Currently, the remote CPU supported are only linuxRT CPUs running 'buildroot-2016.11.1-x86_64' or 'buildroot-2019.08-x86_64', and using the user '${cpu_user}'."
     echo
 }
 
@@ -136,12 +130,6 @@ getFpgaIp()
 #############
 # Main body #
 #############
-
-# Check if the rssi_binary exist
-if [ ! -f ${rssi_bridge_bin} ]; then
-    echo "rssi_binary '${rssi_bridge_bin}' not found!"
-    exit 1
-fi
 
 # Verify inputs arguments
 while [[ $# -gt 0 ]]
@@ -196,23 +184,23 @@ echo
 # Verify mandatory parameters
 
 # Check if the top level YAML file was defined, and if it exist
-echo "Checking YAML file..."
+printf "Checking YAML file...                             "
 if [ -z ${yaml+x} ]; then
-    echo "Top level YAML file not defined!"
-    echo "Checking tarball file..."
+    printf "Top level YAML file not defined!\n"
+    printf "Checking tarball file...                          "
 
     # Check if the tarball file was defined, and if it exist
     if [ -z ${tar+x} ]; then
-        echo "Tarball YAML file not defined!"
+        printf "Tarball YAML file not defined!\n"
         echo "You must specified a either a top level YAML file, or a tarball file."
         clean_up 1
     else
         if [ ! -f ${tar} ]; then
-            echo "Tarball file '${tar}' not found!"
+            printf "Tarball file '${tar}' not found!\n"
             clean_up 1
         else
             temp_dir=/tmp/${USER}/cpswTreeGUI_yaml
-            echo "Tarball file found. Extracting it to '${temp_dir}'..."
+            printf "Tarball file found. Extracting it to '${temp_dir}'\n"
             rm -rf ${temp_dir}
             mkdir -p ${temp_dir}
             tar -zxf ${tar} --strip 1 -C ${temp_dir}
@@ -225,33 +213,70 @@ if [ -z ${yaml+x} ]; then
     fi
 else
     if [ ! -f ${yaml} ]; then
-        echo "Top level yaml file '${yaml}' not found!"
+        printf "Top level yaml file '${yaml}' not found!\n"
         clean_up 1
     fi
 fi
-echo "Top level YAML file found: ${yaml}"
+printf "Top level YAML file found: ${yaml}"
 echo
 
 # Check if the CPU was defined, and if it is online
-echo "Checking CPU..."
+printf "Verifying if CPU is online...                     "
 if [ -z ${cpu+x} ]; then
-    echo "CPU not defined!"
+    printf "CPU not defined!\n"
     clean_up 1
 else
-    echo "Verifying if CPU is online..."
     if ! ping -c 2 ${cpu} &> /dev/null ; then
-        echo "CPU unreachable!"
+        printf "CPU unreachable!\n"
         clean_up 1
     fi
 fi
-echo "CPU is online."
-echo
+printf "CPU is online.\n"
+
+# Check kernel version on CPU
+printf "Looking for CPU kernel type...                    "
+kernel_version=$(ssh ${cpu_user}@${cpu} /bin/uname -r)
+
+# Check if the target CPU is running a linuxRT kernel
+rt=$(echo ${kernel_version} | grep rt)
+if [ -z ${rt} ]; then
+    printf "Error: non-RT kernel detected. Only linuxRT target are supported.\n"
+    exit 1
+fi
+
+printf "RT kernel detected.\n"
+
+# Check buildroot version
+printf "Looking for Buildroot version...                  "
+br2016=$(echo ${kernel_version} | grep 4.8.11)
+if [ ${br2016} ]; then
+    printf "buildroot-2016.11.1\n"
+    cpu_arch=buildroot-2016.11.1-x86_64
+else
+    br2019=$(echo ${kernel_version} | grep 4.14.139)
+    if [ $br2019 ]; then
+        printf "buildroot-2019.08\n"
+        cpu_arch=buildroot-2019.08-x86_64
+    else
+        prtinf "Buildroot version not supported!"
+        exit 1
+    fi
+fi
+
+# rssi_bridge binary
+rssi_bridge_bin=$PACKAGE_TOP/cpsw/framework/${cpsw_framework_version}/${cpu_arch}/bin/rssi_bridge
+
+# Check if the rssi_binary exist
+if [ ! -f ${rssi_bridge_bin} ]; then
+    echo "rssi_binary '${rssi_bridge_bin}' not found!"
+    clean_up 1
+fi
 
 # Check IP address or shelfmanager/slot number
-echo "Checking FPGA IP address..."
+printf "Checking FPGA IP address...                       "
 if [ -z ${fpga_ip+x} ]; then
 
-    echo "IP address was not defined. It will be calculated automatically from the crate ID and slot number..."
+    printf "IP address was not defined. It will be calculated automatically from the crate ID and slot number.\n"
 
     # If the IP address is not defined, shelfmanager and slot number must be defined
     if [ -z ${shelfmanager+x} ]; then
@@ -271,30 +296,26 @@ if [ -z ${fpga_ip+x} ]; then
     fi
 
     # Check if the shelfmanager is online
-    echo "Verifying if the shelfmanager is online..."
+    printf "Verifying if the shelfmanager is online...        "
     if ! ping -c 2 ${shelfmanager} &> /dev/null ; then
-        echo "shelfmanager unreachable!"
+        printf "shelfmanager unreachable!\n"
         clean_up 1
     else
-        echo "shelfmanager is online."
+        printf "shelfmanager is online.\n"
     fi
-    echo
-
 
     # Calculate the FPGA IP address
     ipmb=$(expr 0128 + 2 \* $slot)
 
-    echo "Reading Crate ID via IPMI..."
+    printf "Reading Crate ID via IPMI...                      "
     crate_id=$(getCrateId)
-    echo "Create ID: ${crate_id}"
+    printf "${crate_id}\n"
 
-    echo "Calculating FPGA IP address..."
     fpga_ip=$(getFpgaIp)
 else
-    echo "IP address was defined. Ignoring shelfmanager and slot number."
+    printf "IP address was defined. Ignoring shelfmanager and slot number.\n"
 fi
-echo "FPGA IP: ${fpga_ip}"
-echo
+printf "FPGA IP:                                          ${fpga_ip}\n"
 
 # Unless streams were enabled by the user, they are disabled by default
 if [ -z ${enable_streams+x} ]; then
@@ -302,37 +323,40 @@ if [ -z ${enable_streams+x} ]; then
 fi
 
 # Check connection between CPU and FPGA
-echo "Checking connection between CPU and FPGA..."
+printf "Checking connection between CPU and FPGA...       "
 if ! ssh ${cpu_user}@${cpu} ping -c 2 ${fpga_ip} &> /dev/null ; then
-    echo "FPGA can not be reached from the remote CPU."
+    printf "FPGA can not be reached from the remote CPU.\n"
     clean_up 1
 fi
-echo "Connection OK."
-echo
+printf "Connection OK.\n"
 
 # Check if a rssi_bridge is already running in the remote cpu
 screen_session_name=rssi_bridge_${fpga_ip}
-echo "Verifying is a screen session '${screen_session_name}' is already running in '${cpu}'..."
+printf "Verifying if rssi_bridge is already running...    "
 if [ $(ssh ${cpu_user}@${cpu} screen -ls | grep ${screen_session_name} | wc -l) != 0 ]; then
-  echo "Yes, a screen session '${screen_session_name}' is already running in '${cpu}'. Aborting..."
+  printf "Yes, it is already running. Aborting...\n"
+  clean_up 1
 else
-  # Start the rssi_bridge in a screen session in the remote CPU
-  echo "No screen session was found. Starting a new screen session..."
-  ssh ${cpu_user}@${cpu} screen -dmS ${screen_session_name} -h 8192 ${rssi_bridge_bin} -a ${fpga_ip} -u 8192 -p 8193 -p 8194 -u 8197 -p 8198 -v
-  screen_session_started=yes
-
-  # Verifying if the screen session is running
-  if [ $(ssh ${cpu_user}@${cpu} screen -ls | grep ${screen_session_name} | wc -l) == 0 ]; then
-    echo "Failed to start the rssi_bridge. Is there already a rssi_bidge running in '${cpu}'?"
-  else
-    echo "Done!. The rssi_bridge is now running in '${cpu}' in the screen session '${screen_session_name}'"
-    echo
-
-    # Start the cpswTreeGui
-    echo "Starting the GUI..."
-    . ${env_setup} && python3 ${top_dir}/cpswTreeGUI.py --ipAddr ${fpga_ip} --rssiBridge=${cpu} ${maxleaves} ${disable_streams} ${yaml} NetIODev
-  fi
+    printf "No rssi_bridge was found\n"
 fi
+
+# Start the rssi_bridge in a screen session in the remote CPU
+printf "Starting rssi_brdige in an screen session...      "
+ssh ${cpu_user}@${cpu} screen -dmS ${screen_session_name} -h 8192 ${rssi_bridge_bin} -a ${fpga_ip} -u 8192 -p 8193 -p 8194 -u 8197 -p 8198 -v -d
+screen_session_started=yes
+
+# Verifying if the screen session is running
+if [ $(ssh ${cpu_user}@${cpu} screen -ls | grep ${screen_session_name} | wc -l) == 0 ]; then
+    printf "Failed to start the rssi_bridge.\n"
+    clean_up 1
+else
+    printf "Done!. It is now running in the screen session '${screen_session_name}' in '${cpu}'\n"
+fi
+
+# Start the cpswTreeGui
+echo "Starting the GUI..."
+echo
+. ${env_setup} && python3 ${top_dir}/cpswTreeGUI.py --ipAddr ${fpga_ip} --rssiBridge=${cpu} ${maxleaves} ${disable_streams} ${yaml} NetIODev
 
 # Clean up system and exit
 clean_up 0
