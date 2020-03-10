@@ -221,12 +221,11 @@ printf "Top level YAML file found: ${yaml}"
 echo
 
 # Check if the CPU was defined, and if it is online
-printf "Checking CPU...                                   "
+printf "Verifying if CPU is online...                     "
 if [ -z ${cpu+x} ]; then
     printf "CPU not defined!\n"
     clean_up 1
 else
-    printf "Verifying if CPU is online...                     "
     if ! ping -c 2 ${cpu} &> /dev/null ; then
         printf "CPU unreachable!\n"
         clean_up 1
@@ -305,8 +304,6 @@ if [ -z ${fpga_ip+x} ]; then
     else
         printf "shelfmanager is online.\n"
     fi
-    echo
-
 
     # Calculate the FPGA IP address
     ipmb=$(expr 0128 + 2 \* $slot)
@@ -315,7 +312,6 @@ if [ -z ${fpga_ip+x} ]; then
     crate_id=$(getCrateId)
     printf "Create ID: ${crate_id}\n"
 
-    printf "Calculating FPGA IP address...                    "
     fpga_ip=$(getFpgaIp)
 else
     printf "IP address was defined. Ignoring shelfmanager and slot number.\n"
@@ -339,27 +335,30 @@ echo
 
 # Check if a rssi_bridge is already running in the remote cpu
 screen_session_name=rssi_bridge_${fpga_ip}
-echo "Verifying is a screen session '${screen_session_name}' is already running in '${cpu}'..."
+printf "Verifying if '${screen_session_name}' is running in '${cpu}'...    "
 if [ $(ssh ${cpu_user}@${cpu} screen -ls | grep ${screen_session_name} | wc -l) != 0 ]; then
-  echo "Yes, a screen session '${screen_session_name}' is already running in '${cpu}'. Aborting..."
+  printf "Yes, a screen session is already running. Aborting...\n"
+  clean_up 1
 else
-  # Start the rssi_bridge in a screen session in the remote CPU
-  echo "No screen session was found. Starting a new screen session..."
-  ssh ${cpu_user}@${cpu} screen -dmS ${screen_session_name} -h 8192 ${rssi_bridge_bin} -a ${fpga_ip} -u 8192 -p 8193 -p 8194 -u 8197 -p 8198 -v -d
-  screen_session_started=yes
-
-  # Verifying if the screen session is running
-  if [ $(ssh ${cpu_user}@${cpu} screen -ls | grep ${screen_session_name} | wc -l) == 0 ]; then
-    echo "Failed to start the rssi_bridge. Is there already a rssi_bidge running in '${cpu}'?"
-  else
-    echo "Done!. The rssi_bridge is now running in '${cpu}' in the screen session '${screen_session_name}'"
-    echo
-
-    # Start the cpswTreeGui
-    echo "Starting the GUI..."
-    . ${env_setup} && python3 ${top_dir}/cpswTreeGUI.py --ipAddr ${fpga_ip} --rssiBridge=${cpu} ${maxleaves} ${disable_streams} ${yaml} NetIODev
-  fi
+    printf "No screen session was found\n"
 fi
+
+# Start the rssi_bridge in a screen session in the remote CPU
+ptinf "Starting a new screen session...                                     "
+ssh ${cpu_user}@${cpu} screen -dmS ${screen_session_name} -h 8192 ${rssi_bridge_bin} -a ${fpga_ip} -u 8192 -p 8193 -p 8194 -u 8197 -p 8198 -v -d
+screen_session_started=yes
+
+# Verifying if the screen session is running
+if [ $(ssh ${cpu_user}@${cpu} screen -ls | grep ${screen_session_name} | wc -l) == 0 ]; then
+    prtinf "Failed to start the rssi_bridge.\n"
+    clean_up 1
+else
+    printf "Done!. The rssi_bridge is now running\n"
+fi
+
+# Start the cpswTreeGui
+echo "Starting the GUI..."
+. ${env_setup} && python3 ${top_dir}/cpswTreeGUI.py --ipAddr ${fpga_ip} --rssiBridge=${cpu} ${maxleaves} ${disable_streams} ${yaml} NetIODev
 
 # Clean up system and exit
 clean_up 0
