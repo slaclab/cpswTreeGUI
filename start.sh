@@ -329,7 +329,6 @@ if ! ssh ${cpu_user}@${cpu} ping -c 2 ${fpga_ip} &> /dev/null ; then
     clean_up 1
 fi
 printf "Connection OK.\n"
-echo
 
 # Check if a rssi_bridge is already running in the remote cpu
 screen_session_name=rssi_bridge_${fpga_ip}
@@ -351,11 +350,12 @@ if [ $(ssh ${cpu_user}@${cpu} screen -ls | grep ${screen_session_name} | wc -l) 
     printf "Failed to start the rssi_bridge.\n"
     clean_up 1
 else
-    printf "Done!. '${screen_session_name}' is running in '${cpu}'\n"
+    printf "Done!. It is now running in the screen session '${screen_session_name}' in '${cpu}'\n"
 fi
 
 # Start the cpswTreeGui
 echo "Starting the GUI..."
+echo
 . ${env_setup} && python3 ${top_dir}/cpswTreeGUI.py --ipAddr ${fpga_ip} --rssiBridge=${cpu} ${maxleaves} ${disable_streams} ${yaml} NetIODev
 
 # Clean up system and exit
