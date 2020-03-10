@@ -333,16 +333,16 @@ echo
 
 # Check if a rssi_bridge is already running in the remote cpu
 screen_session_name=rssi_bridge_${fpga_ip}
-printf "Verifying if '${screen_session_name}' is running in '${cpu}'...    "
+printf "Verifying if rssi_bridge is already running...    "
 if [ $(ssh ${cpu_user}@${cpu} screen -ls | grep ${screen_session_name} | wc -l) != 0 ]; then
-  printf "Yes, a screen session is already running. Aborting...\n"
+  printf "Yes, it is already running. Aborting...\n"
   clean_up 1
 else
-    printf "No screen session was found\n"
+    printf "No rssi_bridge was found\n"
 fi
 
 # Start the rssi_bridge in a screen session in the remote CPU
-printf "Starting a new screen session...                                     "
+printf "Starting rssi_brdige in an screen session...      "
 ssh ${cpu_user}@${cpu} screen -dmS ${screen_session_name} -h 8192 ${rssi_bridge_bin} -a ${fpga_ip} -u 8192 -p 8193 -p 8194 -u 8197 -p 8198 -v -d
 screen_session_started=yes
 
@@ -351,7 +351,7 @@ if [ $(ssh ${cpu_user}@${cpu} screen -ls | grep ${screen_session_name} | wc -l) 
     printf "Failed to start the rssi_bridge.\n"
     clean_up 1
 else
-    printf "Done!. The rssi_bridge is now running\n"
+    printf "Done!. '${screen_session_name}' is running in '${cpu}'\n"
 fi
 
 # Start the cpswTreeGui
