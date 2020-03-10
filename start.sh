@@ -232,7 +232,6 @@ else
     fi
 fi
 printf "CPU is online.\n"
-echo
 
 # Check kernel version on CPU
 printf "Looking for CPU kernel type...                    "
@@ -310,14 +309,13 @@ if [ -z ${fpga_ip+x} ]; then
 
     printf "Reading Crate ID via IPMI...                      "
     crate_id=$(getCrateId)
-    printf "Create ID: ${crate_id}\n"
+    printf "${crate_id}\n"
 
     fpga_ip=$(getFpgaIp)
 else
     printf "IP address was defined. Ignoring shelfmanager and slot number.\n"
 fi
 printf "FPGA IP:                                          ${fpga_ip}\n"
-echo
 
 # Unless streams were enabled by the user, they are disabled by default
 if [ -z ${enable_streams+x} ]; then
@@ -344,13 +342,13 @@ else
 fi
 
 # Start the rssi_bridge in a screen session in the remote CPU
-ptinf "Starting a new screen session...                                     "
+printf "Starting a new screen session...                                     "
 ssh ${cpu_user}@${cpu} screen -dmS ${screen_session_name} -h 8192 ${rssi_bridge_bin} -a ${fpga_ip} -u 8192 -p 8193 -p 8194 -u 8197 -p 8198 -v -d
 screen_session_started=yes
 
 # Verifying if the screen session is running
 if [ $(ssh ${cpu_user}@${cpu} screen -ls | grep ${screen_session_name} | wc -l) == 0 ]; then
-    prtinf "Failed to start the rssi_bridge.\n"
+    printf "Failed to start the rssi_bridge.\n"
     clean_up 1
 else
     printf "Done!. The rssi_bridge is now running\n"
