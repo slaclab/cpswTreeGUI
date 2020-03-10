@@ -14,14 +14,8 @@ env_setup=${top_dir}/env.slac.sh
 # we don't have to write it twice.
 cpsw_framework_version=$(grep cpsw/framework ${env_setup} | head -n 1 | sed -r 's|.+/framework/([^/]+)/.*|\1|')
 
-# Remote CPU architecture
-cpu_arch=buildroot-2016.11.1-x86_64
-
 # Remote CPU user
 cpu_user=laci
-
-# rssi_bridge binary
-rssi_bridge_bin=$PACKAGE_TOP/cpsw/framework/${cpsw_framework_version}/${cpu_arch}/bin/rssi_bridge
 
 # Shell PID
 top_pid=$$
@@ -94,7 +88,7 @@ usage()
     echo "The script will check if an rssi_bridge is already running in the remote CPU connected to the specified FGPA_IP. Also, it will check if the CPU and FPGA"
     echo "are online."
     echo
-    echo "Currently, the remote CPU supported are only linuxRT CPUs running '${cpu_arch}', and using the user '${cpu_user}'."
+    echo "Currently, the remote CPU supported are only linuxRT CPUs running 'buildroot-2016.11.1-x86_64' or 'buildroot-2019.08-x86_64', and using the user '${cpu_user}'."
     echo
 }
 
@@ -136,12 +130,6 @@ getFpgaIp()
 #############
 # Main body #
 #############
-
-# Check if the rssi_binary exist
-if [ ! -f ${rssi_bridge_bin} ]; then
-    echo "rssi_binary '${rssi_bridge_bin}' not found!"
-    exit 1
-fi
 
 # Verify inputs arguments
 while [[ $# -gt 0 ]]
@@ -246,6 +234,45 @@ else
 fi
 echo "CPU is online."
 echo
+
+# Check kernel version on CPU
+printf "Looking for CPU kernel type...                    "
+kernel_version=$(ssh ${cpu_user}@${cpu} /bin/uname -r)
+
+# Check if the target CPU is running a linuxRT kernel
+rt=$(echo ${kernel_version} | grep rt)
+if [ -z ${rt} ]; then
+    printf "Error: non-RT kernel detected. Only linuxRT target are supported.\n"
+    exit 1
+fi
+
+printf "RT kernel detected.\n"
+
+# Check buildroot version
+printf "Looking for Buildroot version...                  "
+br2016=$(echo ${kernel_version} | grep 4.8.11)
+if [ ${br2016} ]; then
+    printf "buildroot-2016.11.1\n"
+    cpu_arch=buildroot-2016.11.1-x86_64
+else
+    br2019=$(echo ${kernel_version} | grep 4.14.139)
+    if [ $br2019 ]; then
+        printf "buildroot-2019.08\n"
+        cpu_arch=buildroot-2019.08-x86_64
+    else
+        prtinf "Buildroot version not supported!"
+        exit 1
+    fi
+fi
+
+# rssi_bridge binary
+rssi_bridge_bin=$PACKAGE_TOP/cpsw/framework/${cpsw_framework_version}/${cpu_arch}/bin/rssi_bridge
+
+# Check if the rssi_binary exist
+if [ ! -f ${rssi_bridge_bin} ]; then
+    echo "rssi_binary '${rssi_bridge_bin}' not found!"
+    exit 1
+fi
 
 # Check IP address or shelfmanager/slot number
 echo "Checking FPGA IP address..."
