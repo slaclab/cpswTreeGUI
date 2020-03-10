@@ -71,10 +71,13 @@ usage()
     echo "    -c|--cpu          <cpu_name>          : The remote CPU node name."
     echo "    -y|--yaml         <YAML_file>         : Path to the top level YAML file.If defined, -t will be ignored."
     echo "    -t|--tar          <tarball_file>      : Path to the YAML tarball file. Must be defined is -y is not defined."
+    echo "    -s|--enable-streams                   : Enable all streams"
     echo "    -h|--help                             : Show this message."
     echo ""
     echo "If -a if not defined, then -S and -N must both be defined, and the FPGA IP address will be automatically calculated from the crate ID and slot number."
     echo "If -a if defined, -S and -N are ignored."
+    echo
+    echo "All streams are disabled by default. They can be enabled by using the '-s|--enable-streams' option."
     echo
     echo "The YAML file must be specified either pointing to a top level file (usually called 000TopLevel.yaml) using -y|--yaml, or a tarball file containing"
     echo "all the YAML files, using -t|--tar. If -y is used, -t is ignored."
@@ -166,6 +169,9 @@ case ${key} in
     -L|--maxExpandedLeaves)
     maxleaves="--maxExpandedLeaves=$2"
     shift
+    ;;
+    -s|--enable-streams)
+    enable_streams=1
     ;;
     -h|--help)
     usage
@@ -283,6 +289,11 @@ fi
 echo "FPGA IP: ${fpga_ip}"
 echo
 
+# Unless streams were enabled by the user, they are disabled by default
+if [ -z ${enable_streams+x} ]; then
+    disable_streams="--disableStreams"
+fi
+
 # Check connection between CPU and FPGA
 echo "Checking connection between CPU and FPGA..."
 if ! ssh ${cpu_user}@${cpu} ping -c 2 ${fpga_ip} &> /dev/null ; then
@@ -312,7 +323,7 @@ else
 
     # Start the cpswTreeGui
     echo "Starting the GUI..."
-    . env.slac.sh && python3 cpswTreeGUI.py --ipAddr ${fpga_ip} --rssiBridge=${cpu} ${maxleaves} ${yaml} NetIODev
+    . env.slac.sh && python3 cpswTreeGUI.py --ipAddr ${fpga_ip} --rssiBridge=${cpu} ${maxleaves} ${disable_streams} ${yaml} NetIODev
   fi
 fi
 
