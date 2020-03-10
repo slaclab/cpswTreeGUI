@@ -3,7 +3,7 @@
 Release notes for the CPSW Tree GUI
 
 ## Releases:
-* __R1.2.0__: 2020-02-03 J. Vasquez
+* __R1.2.0__: 2020-03-10 J. Vasquez
   * Add support for buildroot 2019.08.
   * Update to cpsw/framework version 4.4.2.
   * Add the option `-d` to the `rssi_bridge` to get debug information.
