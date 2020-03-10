@@ -184,23 +184,23 @@ echo
 # Verify mandatory parameters
 
 # Check if the top level YAML file was defined, and if it exist
-echo "Checking YAML file..."
+printf "Checking YAML file...                             "
 if [ -z ${yaml+x} ]; then
-    echo "Top level YAML file not defined!"
-    echo "Checking tarball file..."
+    printf "Top level YAML file not defined!\n"
+    printf "Checking tarball file...                          "
 
     # Check if the tarball file was defined, and if it exist
     if [ -z ${tar+x} ]; then
-        echo "Tarball YAML file not defined!"
+        printf "Tarball YAML file not defined!\n"
         echo "You must specified a either a top level YAML file, or a tarball file."
         clean_up 1
     else
         if [ ! -f ${tar} ]; then
-            echo "Tarball file '${tar}' not found!"
+            printf "Tarball file '${tar}' not found!\n"
             clean_up 1
         else
             temp_dir=/tmp/${USER}/cpswTreeGUI_yaml
-            echo "Tarball file found. Extracting it to '${temp_dir}'..."
+            printf "Tarball file found. Extracting it to '${temp_dir}'\n"
             rm -rf ${temp_dir}
             mkdir -p ${temp_dir}
             tar -zxf ${tar} --strip 1 -C ${temp_dir}
@@ -213,26 +213,26 @@ if [ -z ${yaml+x} ]; then
     fi
 else
     if [ ! -f ${yaml} ]; then
-        echo "Top level yaml file '${yaml}' not found!"
+        printf "Top level yaml file '${yaml}' not found!\n"
         clean_up 1
     fi
 fi
-echo "Top level YAML file found: ${yaml}"
+printf "Top level YAML file found: ${yaml}"
 echo
 
 # Check if the CPU was defined, and if it is online
-echo "Checking CPU..."
+printf "Checking CPU...                                   "
 if [ -z ${cpu+x} ]; then
-    echo "CPU not defined!"
+    printf "CPU not defined!\n"
     clean_up 1
 else
-    echo "Verifying if CPU is online..."
+    printf "Verifying if CPU is online...                     "
     if ! ping -c 2 ${cpu} &> /dev/null ; then
-        echo "CPU unreachable!"
+        printf "CPU unreachable!\n"
         clean_up 1
     fi
 fi
-echo "CPU is online."
+printf "CPU is online.\n"
 echo
 
 # Check kernel version on CPU
@@ -271,14 +271,14 @@ rssi_bridge_bin=$PACKAGE_TOP/cpsw/framework/${cpsw_framework_version}/${cpu_arch
 # Check if the rssi_binary exist
 if [ ! -f ${rssi_bridge_bin} ]; then
     echo "rssi_binary '${rssi_bridge_bin}' not found!"
-    exit 1
+    clean_up 1
 fi
 
 # Check IP address or shelfmanager/slot number
-echo "Checking FPGA IP address..."
+printf "Checking FPGA IP address...                       "
 if [ -z ${fpga_ip+x} ]; then
 
-    echo "IP address was not defined. It will be calculated automatically from the crate ID and slot number..."
+    printf "IP address was not defined. It will be calculated automatically from the crate ID and slot number.\n"
 
     # If the IP address is not defined, shelfmanager and slot number must be defined
     if [ -z ${shelfmanager+x} ]; then
@@ -298,12 +298,12 @@ if [ -z ${fpga_ip+x} ]; then
     fi
 
     # Check if the shelfmanager is online
-    echo "Verifying if the shelfmanager is online..."
+    printf "Verifying if the shelfmanager is online...        "
     if ! ping -c 2 ${shelfmanager} &> /dev/null ; then
-        echo "shelfmanager unreachable!"
+        printf "shelfmanager unreachable!\n"
         clean_up 1
     else
-        echo "shelfmanager is online."
+        printf "shelfmanager is online.\n"
     fi
     echo
 
@@ -311,16 +311,16 @@ if [ -z ${fpga_ip+x} ]; then
     # Calculate the FPGA IP address
     ipmb=$(expr 0128 + 2 \* $slot)
 
-    echo "Reading Crate ID via IPMI..."
+    printf "Reading Crate ID via IPMI...                      "
     crate_id=$(getCrateId)
-    echo "Create ID: ${crate_id}"
+    printf "Create ID: ${crate_id}\n"
 
-    echo "Calculating FPGA IP address..."
+    printf "Calculating FPGA IP address...                    "
     fpga_ip=$(getFpgaIp)
 else
-    echo "IP address was defined. Ignoring shelfmanager and slot number."
+    printf "IP address was defined. Ignoring shelfmanager and slot number.\n"
 fi
-echo "FPGA IP: ${fpga_ip}"
+printf "FPGA IP:                                          ${fpga_ip}\n"
 echo
 
 # Unless streams were enabled by the user, they are disabled by default
@@ -329,12 +329,12 @@ if [ -z ${enable_streams+x} ]; then
 fi
 
 # Check connection between CPU and FPGA
-echo "Checking connection between CPU and FPGA..."
+printf "Checking connection between CPU and FPGA...       "
 if ! ssh ${cpu_user}@${cpu} ping -c 2 ${fpga_ip} &> /dev/null ; then
-    echo "FPGA can not be reached from the remote CPU."
+    printf "FPGA can not be reached from the remote CPU.\n"
     clean_up 1
 fi
-echo "Connection OK."
+printf "Connection OK.\n"
 echo
 
 # Check if a rssi_bridge is already running in the remote cpu
