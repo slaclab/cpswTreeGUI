@@ -3,6 +3,14 @@
 Release notes for the CPSW Tree GUI
 
 ## Releases:
+* __R1.2.2__: 2023-04-11 J. Bellister
+  * Update cpsw/framework to version R4.5.1 to use our python 3.8 conda environment during the
+    build process. This fixes an issue where the tree would not run on RHEL 7 machines.
+  * Update the tree gui code to use the sip module from the PyQt5 package.
+
+* __R1.2.1__: 2022-07-13 J. Bellister
+  * Update cpsw/framework to version R4.5.0 which will support displaying unicode characters
+
 * __R1.2.0__: 2020-03-10 J. Vasquez
   * Add support for buildroot 2019.08.
   * Update to cpsw/framework version 4.4.2.
