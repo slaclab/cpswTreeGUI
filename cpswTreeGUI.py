@@ -15,9 +15,8 @@ import socket
 import getopt
 import re
 import os
-import sip
+from   PyQt5                              import QtCore, QtGui, QtWidgets, sip
 sip.setapi('QString', 2)
-from   PyQt5                              import QtCore, QtGui, QtWidgets
 from   PyQt5.QtGui                        import QDoubleValidator
 import yaml_cpp
 import signal
