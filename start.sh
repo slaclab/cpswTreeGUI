@@ -73,6 +73,7 @@ usage()
     echo "    -y|--yaml         <YAML_file>         : Path to the top level YAML file.If defined, -t will be ignored."
     echo "    -t|--tar          <tarball_file>      : Path to the YAML tarball file. Must be defined is -y is not defined."
     echo "    -s|--enable-streams                   : Enable all streams"
+    echo "    -u|--user                             : User account"
     echo "    -h|--help                             : Show this message."
     echo ""
     echo "If -a if not defined, then -S and -N must both be defined, and the FPGA IP address will be automatically calculated from the crate ID and slot number."
@@ -168,6 +169,10 @@ case ${key} in
     -s|--enable-streams)
     enable_streams=1
     ;;
+    -u|--user)
+    cpu_user="$2"
+    shift
+    ;;
     -h|--help)
     usage
     exit 0
@@ -240,14 +245,13 @@ kernel_version=$(ssh ${cpu_user}@${cpu} /bin/uname -r)
 # Check if the target CPU is running a linuxRT kernel
 rt=$(echo ${kernel_version} | grep rt)
 if [ -z ${rt} ]; then
-    printf "Error: non-RT kernel detected. Only linuxRT target are supported.\n"
-    exit 1
+    printf "Non-RT kernel detected.\n"
+else
+    printf "RT kernel detected.\n"
 fi
 
-printf "RT kernel detected.\n"
-
 # Check buildroot version
-printf "Looking for Buildroot version...                  "
+printf "Looking for distribution version...               "
 br2016=$(echo ${kernel_version} | grep 4.8.11)
 if [ ${br2016} ]; then
     printf "buildroot-2016.11.1\n"
@@ -258,8 +262,15 @@ else
         printf "buildroot-2019.08\n"
         cpu_arch=buildroot-2019.08-x86_64
     else
-        prtinf "Buildroot version not supported!"
-        exit 1
+        OS_DESC=$(ssh ${cpu_user}@${cpu} lsb_release -d)
+        OS_REL=$(ssh ${cpu_user}@${cpu} lsb_release -r)
+        if [[ $OS_DESC = *'Red Hat'* ]]; then
+            printf "Running on Red Hat ${OS_REL}.\n"
+            cpu_arch=rhel7-x86_64
+        elif [[ $OS_DESC = *'Ubuntu'* ]]; then
+            printf "Running on Ubuntu ${OS_REL}.\n"
+            cpu_arch=ubuntu20046-x86_64
+        fi
     fi
 fi
 
@@ -276,7 +287,7 @@ fi
 printf "Checking FPGA IP address...                       "
 if [ -z ${fpga_ip+x} ]; then
 
-    printf "IP address was not defined. It will be calculated automatically from the crate ID and slot number.\n"
+    printf "IP address was not defined. Calculating automatically from crate ID and slot number.\n"
 
     # If the IP address is not defined, shelfmanager and slot number must be defined
     if [ -z ${shelfmanager+x} ]; then
@@ -337,7 +348,7 @@ if [ $(ssh ${cpu_user}@${cpu} screen -ls | grep ${screen_session_name} | wc -l) 
   printf "Yes, it is already running. Aborting...\n"
   clean_up 1
 else
-    printf "No rssi_bridge was found\n"
+    printf "No rssi_bridge was found.\n"
 fi
 
 # Start the rssi_bridge in a screen session in the remote CPU
@@ -350,7 +361,7 @@ if [ $(ssh ${cpu_user}@${cpu} screen -ls | grep ${screen_session_name} | wc -l) 
     printf "Failed to start the rssi_bridge.\n"
     clean_up 1
 else
-    printf "Done!. It is now running in the screen session '${screen_session_name}' in '${cpu}'\n"
+    printf "Done! It is now running in the screen session '${screen_session_name}' in '${cpu}'.\n"
 fi
 
 # Start the cpswTreeGui
