@@ -196,7 +196,7 @@ case ${key} in
     use_epics_only=1
     ;;
     -r|--record-prefix)
-    record_prefix="--recordPrefix=$2"
+    record_prefix="--record-prefix=$2"
     shift
     ;;
     -p|--socks-proxy)
