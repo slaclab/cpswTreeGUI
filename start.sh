@@ -63,18 +63,34 @@ usage()
 {
     echo "Start the cpswTreeGUI with an rssi_bridge on a remote CPU."
     echo ""
-    echo "usage: ${script_name} [-S|--shelfmanager <shelfmanager_name> -N|--slot <slot_number>]"
-    echo "                      [-a|--addr <FPGA_IP>] -c|--cpu <cpu_name> [-y|--yaml <YAML_file>]"
-    echo "                      [-t|--tar <tarball_file>]"
-    echo "    -S|--shelfmanager <shelfmanager_name> : ATCA shelfmanager node name or IP address. Must be used with -N."
-    echo "    -N|--slot         <slot_number>       : ATCA crate slot number. Must be used with -S."
-    echo "    -a|--addr         <FPGA_IP>           : FPGA IP address. If defined, -S and -N are ignored."
-    echo "    -c|--cpu          <cpu_name>          : The remote CPU node name."
-    echo "    -y|--yaml         <YAML_file>         : Path to the top level YAML file.If defined, -t will be ignored."
-    echo "    -t|--tar          <tarball_file>      : Path to the YAML tarball file. Must be defined is -y is not defined."
-    echo "    -s|--enable-streams                   : Enable all streams"
-    echo "    -u|--user                             : User account"
-    echo "    -h|--help                             : Show this message."
+    echo "usage: ${script_name}  [-S|--shelfmanager <shelfmanager_name> -N|--slot <slot_number>]"
+    echo "                       [-a|--addr <FPGA_IP>] -c|--cpu <cpu_name> [-y|--yaml <YAML_file>]"
+    echo "                       [-t|--tar <tarball_file>]"
+    echo "    -S|--shelfmanager  <shelfmanager_name> : ATCA shelfmanager node name or IP address. Must be used with -N."
+    echo "    -N|--slot          <slot_number>       : ATCA crate slot number. Must be used with -S."
+    echo "    -a|--addr          <FPGA_IP>           : FPGA IP address. If defined, -S and -N are ignored."
+    echo "    -c|--cpu           <cpu_name>          : The remote CPU node name."
+    echo "    -y|--yaml          <YAML_file>         : Path to the top level YAML file. If defined, -t will be ignored."
+    echo "    -t|--tar           <tarball_file>      : Path to the YAML tarball file. Must be defined if -y is not defined."
+    echo "    -s|--enable-streams                    : Enable all streams."
+    echo "    -u|--user                              : User account."
+    echo "    -h|--help                              : Show this message."
+    echo "    -e|--epics                             : Use EPICS CA to connect."
+    echo "    -E|--epics-only                        : Disable CPSW entirely but use a simplified YAML file."
+    echo "                                             Such YAML file is produced by a YCPSWASYN IOC."
+    echo "                                             NOTE: functionality is reduced in this mode."
+    echo "    -r|--record-prefix <prefix>            : EPICS Record name prefix; must match (non-hashed) prefix set."
+    echo "                                             on the IOC."
+    echo "    -p|--socks-proxy   <addr>              : connect to any EPICS IOC via a SOCKS proxy on the machine."
+    echo "                                             at <addr>."
+    echo "                                             This feature is mostly used for tunneling TCP via SSH;"
+    echo "                                             consult the SSH documentation (-D option). In most cases."
+    echo "                                             this is simply 'localhost'."
+    echo "                                             NOTE: this requires the EPICS client to be patched for SOCKS;"
+    echo "                                             consult 'http://slac.stanford.edu/~strauman/epics/caxy/' for."
+    echo "                                             more information."
+    echo "    -L|--max-expanded-leaves    <max>      : If leaves in the tree are arrays then individual elements."
+    echo "                                             are not shown if the array has more than <max> elements."
     echo ""
     echo "If -a if not defined, then -S and -N must both be defined, and the FPGA IP address will be automatically calculated from the crate ID and slot number."
     echo "If -a if defined, -S and -N are ignored."
@@ -173,6 +189,20 @@ case ${key} in
     cpu_user="$2"
     shift
     ;;
+    -e|--epics)
+    use_epics=1
+    ;;
+    -E|--epics-only)
+    use_epics_only=1
+    ;;
+    -r|--record-prefix)
+    record_prefix="--recordPrefix=$2"
+    shift
+    ;;
+    -p|--socks-proxy)
+    socks_proxy="--socksProxy=$2"
+    shift
+    ;;
     -h|--help)
     usage
     exit 0
@@ -183,9 +213,9 @@ case ${key} in
 esac
 shift
 done
-
+      
 echo
-
+                     
 # Verify mandatory parameters
 
 # Check if the top level YAML file was defined, and if it exist
@@ -193,7 +223,7 @@ printf "Checking YAML file...                             "
 if [ -z ${yaml+x} ]; then
     printf "Top level YAML file not defined!\n"
     printf "Checking tarball file...                          "
-
+                          
     # Check if the tarball file was defined, and if it exist
     if [ -z ${tar+x} ]; then
         printf "Tarball YAML file not defined!\n"
@@ -333,6 +363,16 @@ if [ -z ${enable_streams+x} ]; then
     disable_streams="--disableStreams"
 fi
 
+# Check if EPICS is used instead of reading from hardware 
+if [ -z ${use_epics+x} ]; then
+    enable_epics="--useEpics"
+fi
+
+# Check if EPICS ONLY is used (i.e. cpsw is entirely disabled) 
+if [ -z ${use_epics_only+x} ]; then
+    enable_epics_only="--useEpicsOnly"
+fi
+
 # Check connection between CPU and FPGA
 printf "Checking connection between CPU and FPGA...       "
 if ! ssh ${cpu_user}@${cpu} ping -c 2 ${fpga_ip} &> /dev/null ; then
@@ -367,7 +407,7 @@ fi
 # Start the cpswTreeGui
 echo "Starting the GUI..."
 echo
-. ${env_setup} && python3 ${top_dir}/cpswTreeGUI.py --ipAddr ${fpga_ip} --rssiBridge=${cpu} ${maxleaves} ${disable_streams} ${yaml} NetIODev
+. ${env_setup} && python3 ${top_dir}/cpswTreeGUI.py --ipAddr ${fpga_ip} --rssiBridge=${cpu} ${enable_epics} ${maxleaves} ${socks_proxy} ${record_prefix} ${disable_streams} ${yaml} NetIODev
 
 # Clean up system and exit
-clean_up 0
+clean_up 0 
