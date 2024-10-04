@@ -38,10 +38,16 @@ clean_up()
 {
     echo "Cleaning up..."
 
-    # Kill the screen session
-    if [ ${screen_session_started+x} ]; then
-        echo "Killing screen session in remote CPU..."
-        ssh ${cpu_user}@${cpu} screen -X -S ${screen_session_name}  quit
+    # Kill the rssi bridge session
+    if [ ${rssibridge_session_started+x} ]; then
+        echo "Killing rssi bridge session on remote CPU..."
+	      if [[ ${rssibridge_session_binary} == screen ]];then
+            ssh ${cpu_user}@${cpu} screen -X -S ${rssibridge_session_name}  quit
+	      elif [[ ${rssibridge_session_binary} == tmux ]];then
+            ssh ${cpu_user}@${cpu} tmux kill-session -t ${rssibridge_session_name}
+        else
+	          printf "Unknown session binary... ${rssibridge_session_binary}"
+	      fi
         echo "Done"
         echo
     fi
@@ -62,50 +68,46 @@ clean_up()
 usage()
 {
     echo "Start the cpswTreeGUI with an rssi_bridge on a remote CPU."
-    echo ""
+    echo
     echo "usage: ${script_name}  [-S|--shelfmanager <shelfmanager_name> -N|--slot <slot_number>]"
-    echo "                       [-a|--addr <FPGA_IP>] -c|--cpu <cpu_name> [-y|--yaml <YAML_file>]"
-    echo "                       [-t|--tar <tarball_file>]"
-    echo "    -S|--shelfmanager  <shelfmanager_name> : ATCA shelfmanager node name or IP address. Must be used with -N."
-    echo "    -N|--slot          <slot_number>       : ATCA crate slot number. Must be used with -S."
-    echo "    -a|--addr          <FPGA_IP>           : FPGA IP address. If defined, -S and -N are ignored."
-    echo "    -c|--cpu           <cpu_name>          : The remote CPU node name."
-    echo "    -y|--yaml          <YAML_file>         : Path to the top level YAML file. If defined, -t will be ignored."
-    echo "    -t|--tar           <tarball_file>      : Path to the YAML tarball file. Must be defined if -y is not defined."
-    echo "    -s|--enable-streams                    : Enable all streams."
-    echo "    -u|--user                              : User account."
-    echo "    -h|--help                              : Show this message."
-    echo "    -e|--epics                             : Use EPICS CA to connect."
-    echo "    -E|--epics-only                        : Disable CPSW entirely but use a simplified YAML file."
-    echo "                                             Such YAML file is produced by a YCPSWASYN IOC."
-    echo "                                             NOTE: functionality is reduced in this mode."
-    echo "    -r|--record-prefix <prefix>            : EPICS Record name prefix; must match (non-hashed) prefix set."
-    echo "                                             on the IOC."
-    echo "    -p|--socks-proxy   <addr>              : connect to any EPICS IOC via a SOCKS proxy on the machine."
-    echo "                                             at <addr>."
-    echo "                                             This feature is mostly used for tunneling TCP via SSH;"
-    echo "                                             consult the SSH documentation (-D option). In most cases."
-    echo "                                             this is simply 'localhost'."
-    echo "                                             NOTE: this requires the EPICS client to be patched for SOCKS;"
-    echo "                                             consult 'http://slac.stanford.edu/~strauman/epics/caxy/' for."
-    echo "                                             more information."
-    echo "    -L|--max-expanded-leaves    <max>      : If leaves in the tree are arrays then individual elements."
-    echo "                                             are not shown if the array has more than <max> elements."
-    echo ""
-    echo "If -a if not defined, then -S and -N must both be defined, and the FPGA IP address will be automatically calculated from the crate ID and slot number."
-    echo "If -a if defined, -S and -N are ignored."
+    echo "                 [-a|--addr <FPGA_IP>] -c|--cpu <cpu_name> [-y|--yaml <YAML_file>]"
+    echo "                 [-t|--tar <tarball_file>] [-r|--record-prefix <prefix>] [-p|--socks-proxy <addr>]"
+    echo "                 [-L|--max-expanded-leaves <max>] [-u|--user <username>] [-e|--epics] [-E|--epics-only]"
+    echo "                 [-C|--disable-comm] [-Y|--just-load-yaml] [-s|--enable-streams] [-H|--disable-string-heuristics]"
+    echo  
+    echo "    -S|--shelfmanager         <shelfmanager_name> : ATCA shelfmanager node name or IP address. Must be used with -N."
+    echo "    -N|--slot                 <slot_number>       : ATCA crate slot number. Must be used with -S."
+    echo "    -a|--addr                 <FPGA_IP>           : FPGA IP address. If defined, -S and -N are ignored."
+    echo "    -c|--cpu                  <cpu_name>          : The remote CPU node name."
+    echo "    -y|--yaml                 <YAML_file>         : Path to the top level YAML file. If defined, -t will be ignored."
+    echo "    -t|--tar                  <tarball_file>      : Path to the YAML tarball file. Must be defined if -y is not defined."
+    echo "    -r|--record-prefix        <prefix>            : EPICS Record name prefix; must match IOC prefix."
+    echo "    -p|--socks-proxy          <addr>              : connect to any EPICS IOC via a SOCKS proxy on the machine at <addr>."
+    echo "    -L|--max-expanded-leaves  <max>               : If leaves in the tree are arrays, show elements only if no more than <max>."
+    echo "    -u|--user                 <username>          : User account."
+    echo "    -h|--help                                     : Show this message."
+    echo "    -e|--epics                                    : Use EPICS CA to connect."
+    echo "    -E|--epics-only                               : Disable CPSW entirely but use a simplified YAML file."
+    echo "    -C|--disable-comm                             : Disable CPSW communication. This option can be used to test."
+    echo "    -Y|--just-load-yaml                           : just load the YAML file and exit; used to test the yaml fixup."
+    echo "    -s|--enable-streams                           : Enable all streams."
+    echo "    -H|--disable-string-heuristics                : disable some tests which guess if a value is a string."
+    echo  
+    echo "If -a is not defined, then both -S and -N must be defined. The FPGA IP address will be automatically calculated from the crate ID and slot number."
+    echo "If -a is defined, -S and -N are ignored."
     echo
     echo "All streams are disabled by default. They can be enabled by using the '-s|--enable-streams' option."
     echo
     echo "The YAML file must be specified either pointing to a top level file (usually called 000TopLevel.yaml) using -y|--yaml, or a tarball file containing"
     echo "all the YAML files, using -t|--tar. If -y is used, -t is ignored."
     echo
-    echo "The script will start the rssi_bridge in the remote CPU inside a screen session called 'rssi_bridge_<FPGA_IP>'. Then it will start the cpswTreeGUI here"
-    echo "When the GUI is closed, the remote screen session will be automatically killed."
-    echo "The script will check if an rssi_bridge is already running in the remote CPU connected to the specified FGPA_IP. Also, it will check if the CPU and FPGA"
-    echo "are online."
+    echo "The script will start the rssi_bridge on the remote CPU inside a screen or tmux session called 'rssi_bridge_<FPGA_IP>'. Then it will start the cpswTreeGUI here."
+    echo 
+    echo "When the GUI is closed, the remote screen or tmux session will be automatically killed."
+    echo 
+    echo "The script will check if an rssi_bridge is already running on the remote CPU connected to the specified FGPA_IP. Also, it will check if the CPU and the FPGA are online."
     echo
-    echo "Currently, the remote CPU supported are only linuxRT CPUs running 'buildroot-2016.11.1-x86_64' or 'buildroot-2019.08-x86_64', and using the user '${cpu_user}'."
+    echo "Currently, the remote CPU supported can be linuxRT (i.e. CPUs running 'buildroot-2016.11.1-x86_64' or 'buildroot-2019.08-x86_64'), Ubuntu or a RedHat distribution."
     echo
 }
 
@@ -195,13 +197,26 @@ case ${key} in
     -E|--epics-only)
     use_epics_only=1
     ;;
+    -R|--rssi-bridge)
+    rssi_bridge_addr="--rssiBridge=$2"
+    shift
+    ;;
     -r|--record-prefix)
-    record_prefix="--record-prefix=$2"
+    record_prefix="--recordPrefix=$2"
     shift
     ;;
     -p|--socks-proxy)
     socks_proxy="--socksProxy=$2"
     shift
+    ;;
+    -Y|--just-load-yaml)
+    just_load_yaml=1
+    ;;
+    -C|--disable-comm)
+    dis_comm=1
+    ;;
+    -H|--disable-string-heuristics)
+    dis_string_heuristics=1
     ;;
     -h|--help)
     usage
@@ -363,13 +378,28 @@ if [ -z ${enable_streams+x} ]; then
     disable_streams="--disableStreams"
 fi
 
+# Check if we are just testing the yaml fixup 
+if [[ -v ${just_load_yaml} ]]; then
+    only_load_yaml="--justLoadYaml"
+fi
+
+# This option disables string heuristics
+if [[ -v ${dis_string_heuristics} ]]; then
+    disable_string_heuristics="--disableStringHeuristics"
+fi
+
+# This option disables CPSW 
+if [[ -v ${dis_comm} ]]; then
+    disable_comm="--disableComm"
+fi
+
 # Check if EPICS is used instead of reading from hardware 
-if [ -z ${use_epics+x} ]; then
+if [[ -v ${use_epics} ]]; then
     enable_epics="--useEpics"
 fi
 
 # Check if EPICS ONLY is used (i.e. cpsw is entirely disabled) 
-if [ -z ${use_epics_only+x} ]; then
+if [[ -v ${use_epics_only} ]]; then
     enable_epics_only="--useEpicsOnly"
 fi
 
@@ -381,33 +411,75 @@ if ! ssh ${cpu_user}@${cpu} ping -c 2 ${fpga_ip} &> /dev/null ; then
 fi
 printf "Connection OK.\n"
 
-# Check if a rssi_bridge is already running in the remote cpu
-screen_session_name=rssi_bridge_${fpga_ip}
-printf "Verifying if rssi_bridge is already running...    "
-if [ $(ssh ${cpu_user}@${cpu} screen -ls | grep ${screen_session_name} | wc -l) != 0 ]; then
-  printf "Yes, it is already running. Aborting...\n"
-  clean_up 1
+# Check which terminal multiplexer we should be using
+printf "Identify terminal multiplexer to use...     "
+if [ $(ssh ${cpu_user}@${cpu} which screen | wc -l) == 0 ]; then
+  if [ $(ssh ${cpu_user}@${cpu} which tmux | wc -l) == 0 ]; then
+    printf "Could not find neither screen nor tmux on the remote host...\n"
+    printf "Exiting...\n"
+    exit 0
+  else
+    printf "      Use tmux.\n"
+    rssibridge_session_binary=tmux
+  fi
 else
-    printf "No rssi_bridge was found.\n"
+  printf "      Use screen.\n"
+  rssibridge_session_binary=screen 
 fi
 
-# Start the rssi_bridge in a screen session in the remote CPU
-printf "Starting rssi_brdige in an screen session...      "
-ssh ${cpu_user}@${cpu} screen -dmS ${screen_session_name} -h 8192 ${rssi_bridge_bin} -a ${fpga_ip} -u 8192 -p 8193 -p 8194 -u 8197 -p 8198 -v -d
-screen_session_started=yes
+# Check if an rssi_bridge is already running on the remote cpu
+rssibridge_session_name=rssi_bridge_${fpga_ip}
+rssibridge_session_name=${rssibridge_session_name//[.]/_}
 
-# Verifying if the screen session is running
-if [ $(ssh ${cpu_user}@${cpu} screen -ls | grep ${screen_session_name} | wc -l) == 0 ]; then
-    printf "Failed to start the rssi_bridge.\n"
+printf "Verifying if rssi_bridge is already running...    "
+if [[ ${rssibridge_session_binary} == screen ]];then
+  if [ $(ssh ${cpu_user}@${cpu} screen -ls | grep ${rssibridge_session_name} | wc -l) != 0 ]; then
+    printf "Yes, it is already running. Aborting...\n"
     clean_up 1
-else
-    printf "Done! It is now running in the screen session '${screen_session_name}' in '${cpu}'.\n"
+  else
+    printf "No rssi_bridge was found.\n"
+  fi
+elif [[ ${rssibridge_session_binary} == tmux ]];then
+  if [ $(ssh ${cpu_user}@${cpu} tmux ls | grep ${rssibridge_session_name} | wc -l) != 0 ]; then
+    printf "Yes, it is already running. Aborting...\n"
+    clean_up 1
+  else
+    printf "No rssi_bridge was found.\n"
+  fi
+fi
+
+# Start the rssi_bridge on the remote CPU
+printf "Starting an rssi_bridge...                        "
+if [[ ${rssibridge_session_binary} == screen ]];then
+  ssh ${cpu_user}@${cpu} screen -dmS ${rssibridge_session_name} -h 8192 ${rssi_bridge_bin} -a ${fpga_ip} -u 8192 -p 8193 -p 8194 -u 8197 -p 8198 -v -d
+  rssibridge_session_started=yes
+elif [[ ${rssibridge_session_binary} == tmux ]];then
+  printf "\n\nIN THE FOLLOWING TMUX SCREEN, DETACH MANUALLY WITH CTRL+B THEN D TO BRING UP cpswTreeGUI\n";sleep 8
+  ssh -t ${cpu_user}@${cpu} tmux new -s ${rssibridge_session_name} ${rssi_bridge_bin} -a ${fpga_ip} -u 8192 -p 8193 -p 8194 -u 8197 -p 8198 -v -d 
+  rssibridge_session_started=yes
+fi
+
+# Verifying if a screen or tmux session is running
+if [[ ${rssibridge_session_binary} == screen ]];then
+    if [ $(ssh ${cpu_user}@${cpu} screen -ls | grep ${rssibridge_session_name} | wc -l) == 0 ]; then
+        printf "Failed to start the rssi_bridge.\n"
+        clean_up 1
+    else
+        printf "Done! It is now running in the screen session '${rssibridge_session_name}' on '${cpu}'.\n"
+    fi
+elif [[ ${rssibridge_session_binary} == tmux ]];then
+    if [ $(ssh ${cpu_user}@${cpu} tmux ls | grep ${rssibridge_session_name} | wc -l) == 0 ]; then
+        printf "Failed to start the rssi_bridge.\n"
+        clean_up 1
+    else
+        printf "Done! It is now running in the tmux session '${rssibridge_session_name}' on '${cpu}'.\n"
+    fi
 fi
 
 # Start the cpswTreeGui
 echo "Starting the GUI..."
 echo
-. ${env_setup} && python3 ${top_dir}/cpswTreeGUI.py --ipAddr ${fpga_ip} --rssiBridge=${cpu} ${enable_epics} ${maxleaves} ${socks_proxy} ${record_prefix} ${disable_streams} ${yaml} NetIODev
+. ${env_setup} && python3 ${top_dir}/cpswTreeGUI.py --ipAddr ${fpga_ip} --rssiBridge=${cpu} ${enable_epics} ${maxleaves} ${socks_proxy} ${record_prefix} ${disable_streams} ${only_load_yaml} ${disable_string_heuristics} ${disable_comm} ${yaml} NetIODev
 
 # Clean up system and exit
 clean_up 0 
