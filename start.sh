@@ -82,16 +82,18 @@ usage()
     echo "    -y|--yaml                 <YAML_file>         : Path to the top level YAML file. If defined, -t will be ignored."
     echo "    -t|--tar                  <tarball_file>      : Path to the YAML tarball file. Must be defined if -y is not defined."
     echo "    -r|--record-prefix        <prefix>            : EPICS Record name prefix; must match IOC prefix."
-    echo "    -p|--socks-proxy          <addr>              : connect to any EPICS IOC via a SOCKS proxy on the machine at <addr>."
+    echo "    -p|--socks-proxy          <addr>              : Connect to any EPICS IOC via a SOCKS proxy on the machine at <addr>."
     echo "    -L|--max-expanded-leaves  <max>               : If leaves in the tree are arrays, show elements only if no more than <max>."
     echo "    -u|--user                 <username>          : User account."
+    echo "    -m|--map-port             <f>:<t>             : Patch UDP/TCP port '<f>' to port '<t>' in YAML."
     echo "    -h|--help                                     : Show this message."
     echo "    -e|--epics                                    : Use EPICS CA to connect."
     echo "    -E|--epics-only                               : Disable CPSW entirely but use a simplified YAML file."
     echo "    -C|--disable-comm                             : Disable CPSW communication. This option can be used to test."
     echo "    -Y|--just-load-yaml                           : just load the YAML file and exit; used to test the yaml fixup."
     echo "    -s|--enable-streams                           : Enable all streams."
-    echo "    -H|--disable-string-heuristics                : disable some tests which guess if a value is a string."
+    echo "    -H|--disable-string-heuristics                : Disable some tests which guess if a value is a string."
+    echo "    -I|--with-ioc                                 : Run cpswTreeGUI in parallel with an IOC."
     echo  
     echo "If -a is not defined, then both -S and -N must be defined. The FPGA IP address will be automatically calculated from the crate ID and slot number."
     echo "If -a is defined, -S and -N are ignored."
@@ -197,6 +199,10 @@ case ${key} in
     -E|--epics-only)
     use_epics_only=1
     ;;
+    -m|--map-port)
+    map_udp_port="--mapPort=$2"
+    shift
+    ;;
     -R|--rssi-bridge)
     rssi_bridge_addr="--rssiBridge=$2"
     shift
@@ -217,6 +223,9 @@ case ${key} in
     ;;
     -H|--disable-string-heuristics)
     dis_string_heuristics=1
+    ;;
+    -I|--with-ioc)
+    with_ioc=1
     ;;
     -h|--help)
     usage
@@ -379,28 +388,37 @@ if [ -z ${enable_streams+x} ]; then
 fi
 
 # Check if we are just testing the yaml fixup 
-if [[ -v ${just_load_yaml} ]]; then
+if [ ! -z ${just_load_yaml+x} ]; then
     only_load_yaml="--justLoadYaml"
 fi
 
 # This option disables string heuristics
-if [[ -v ${dis_string_heuristics} ]]; then
+if [ ! -z ${dis_string_heuristics+x} ]; then
     disable_string_heuristics="--disableStringHeuristics"
 fi
 
 # This option disables CPSW 
-if [[ -v ${dis_comm} ]]; then
+if [ ! -z ${dis_comm+x} ]; then
     disable_comm="--disableComm"
 fi
 
 # Check if EPICS is used instead of reading from hardware 
-if [[ -v ${use_epics} ]]; then
+if [ ! -z ${use_epics+x} ]; then
     enable_epics="--useEpics"
 fi
 
 # Check if EPICS ONLY is used (i.e. cpsw is entirely disabled) 
-if [[ -v ${use_epics_only} ]]; then
+if [ ! -z ${use_epics_only+x} ]; then
     enable_epics_only="--useEpicsOnly"
+fi
+
+# Modify the top level YAML if we run in parallel with an IOC
+if [ ! -z ${with_ioc+x} ]; then
+    printf "\nRunning cpswTreeGUI and IOC in parallel\n\n"
+    mod_yaml=$(dirname ${yaml})/$(basename ${yaml}).modified
+    if [ ! $(python topLevelMod.py --toplevel ${yaml} --modified ${mod_yaml}) ]; then
+      yaml=${mod_yaml}
+    fi
 fi
 
 # Check connection between CPU and FPGA
@@ -455,7 +473,7 @@ if [[ ${rssibridge_session_binary} == screen ]];then
   rssibridge_session_started=yes
 elif [[ ${rssibridge_session_binary} == tmux ]];then
   printf "\n\nIN THE FOLLOWING TMUX SCREEN, DETACH MANUALLY WITH CTRL+B THEN D TO BRING UP cpswTreeGUI\n";sleep 8
-  ssh -t ${cpu_user}@${cpu} tmux new -s ${rssibridge_session_name} ${rssi_bridge_bin} -a ${fpga_ip} -u 8192 -p 8193 -p 8194 -u 8197 -p 8198 -v -d 
+  ssh -t ${cpu_user}@${cpu} tmux new -s ${rssibridge_session_name} ${rssi_bridge_bin} -a ${fpga_ip} -p 8192 -p 8193 -p 8194 -u 8197 -p 8198 -v -d 
   rssibridge_session_started=yes
 fi
 
@@ -479,7 +497,8 @@ fi
 # Start the cpswTreeGui
 echo "Starting the GUI..."
 echo
-. ${env_setup} && python3 ${top_dir}/cpswTreeGUI.py --ipAddr ${fpga_ip} --rssiBridge=${cpu} ${enable_epics} ${maxleaves} ${socks_proxy} ${record_prefix} ${disable_streams} ${only_load_yaml} ${disable_string_heuristics} ${disable_comm} ${yaml} NetIODev
+#. ${env_setup} && python3 ${top_dir}/cpswTreeGUI.py --ipAddr ${fpga_ip} --rssiBridge=${cpu} ${enable_epics} ${maxleaves} ${socks_proxy} ${record_prefix} ${disable_streams} ${map_udp_port} ${only_load_yaml} ${disable_string_heuristics} ${disable_comm} ${yaml} NetIODev
+. ${env_setup} && python3 ${top_dir}/cpswTreeGUI.py --ipAddr ${fpga_ip} --rssiBridge=${cpu} ${enable_epics} ${maxleaves} ${socks_proxy} ${record_prefix} ${map_udp_port} --disableStreams ${only_load_yaml} ${disable_string_heuristics} ${disable_comm} ${yaml} NetIODev
 
 # Clean up system and exit
 clean_up 0 
