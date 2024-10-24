@@ -16,7 +16,7 @@ import numpy as np
 # Global vars
 remove_stream_blocks   = ['strm','stream','Stream']
 remove_mmio_blocks     = ['rssi','RSSI:','depack:','Depack:','TDEST:','TDESTMux:']
-replace_srp_protocol   = ['SRP_UDP_V1','SRP_UDP_V3']
+replace_srp_protocol   = ['SRP_UDP_V3']
 typical_udp_ports      = ['8193','8194','8197','8198']
 
 def modify_top_level( toplevel_path ):
