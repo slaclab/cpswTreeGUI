@@ -1,7 +1,7 @@
 ''' topLevelMod.py '''
   
-  # The purpose of the Python functions below to modify the top level
-  # YAML file in order to be able to run cpswTreeGUI in parallel with the IOC
+  # The purpose of this Python script is to modify the top level YAML file of a YAML hierarchy,
+  # in order for a user to be able to run cpswTreeGUI in parallel with an IOC accessing the same FPGA
 
 import os
 import re
@@ -95,10 +95,8 @@ if __name__ == "__main__":
   # Parse out arguments
   args = parser.parse_args()
   
-  #lines = modify_top_level( "/nfs/slac/g/lcls/epics/ioc/data/sioc-b084-ts05/yaml/000TopLevel.yaml" )
   lines = modify_top_level( args.toplevel )
 
-  #f = open('000TopLevel_modified.yaml', 'w')
   f = open( args.modified, 'w' )
   f.writelines( lines )
   f.close()
