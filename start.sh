@@ -473,7 +473,7 @@ if [[ ${rssibridge_session_binary} == screen ]];then
   rssibridge_session_started=yes
 elif [[ ${rssibridge_session_binary} == tmux ]];then
   printf "\n\nIN THE FOLLOWING TMUX SCREEN, DETACH MANUALLY WITH CTRL+B THEN D TO BRING UP cpswTreeGUI\n";sleep 8
-  ssh -t ${cpu_user}@${cpu} tmux new -s ${rssibridge_session_name} ${rssi_bridge_bin} -a ${fpga_ip} -p 8192 -p 8193 -p 8194 -u 8197 -p 8198 -v -d 
+  ssh -t ${cpu_user}@${cpu} tmux new -d -s ${rssibridge_session_name} ${rssi_bridge_bin} -a ${fpga_ip} -p 8192 -p 8193 -p 8194 -u 8197 -p 8198 -v -d 
   rssibridge_session_started=yes
 fi
 
