@@ -3,6 +3,12 @@
 Release notes for the CPSW Tree GUI
 
 ## Releases:
+* __R1.3.0__: 2025-03-11 M. Skoufis 
+  * Updates to run on non-linuxRT hosts, run in parallel with IOCs and with tmux (when screen
+    is not available).  Also verified support for arrays and the capability to run locally.
+    The help section was also improved to provide additional information to the user.
+    ESLCOMMON tickets addressed in this release: 295, 308, 346, 359, 377, 378 and 382. 
+
 * __R1.2.2__: 2023-04-11 J. Bellister
   * Update cpsw/framework to version R4.5.1 to use our python 3.8 conda environment during the
     build process. This fixes an issue where the tree would not run on RHEL 7 machines.
