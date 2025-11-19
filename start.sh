@@ -12,7 +12,6 @@ env_setup=${top_dir}/env.slac.sh
 
 # CPSW framework version. Extract it from the environment setup script so
 # we don't have to write it twice.
-#cpsw_framework_version=$(grep cpsw/framework ${env_setup} | head -n 1 | sed -r 's|.+/framework/([^/]+)/.*|\1|')
 cpsw_framework_version=$(grep CPSW_VERSION= ${env_setup} | sed 's/CPSW_VERSION=//')
 
 # Remote CPU user
