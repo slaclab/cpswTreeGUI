@@ -133,17 +133,47 @@ The provided 'start.sh' script can be used to start cpswTreeGUI on a
 desktop and the rssi_bridge on a remote CPU with a single command.
 
 ```
-usage: start.sh [-S|--shelfmanager <shelfmanager_name> -N|--slot <slot_number>]
-                [-a|--addr <FPGA_IP>] -c|--cpu <cpu_name> [-y|--yaml <YAML_file>]
-                [-t|--tar <tarball_file>]
+usage: start.sh  [-S|--shelfmanager <shelfmanager_name> -N|--slot <slot_number>]
+                 [-a|--addr <FPGA_IP>] -c|--cpu <cpu_name> [-y|--yaml <YAML_file>]
+                 [-t|--tar <tarball_file>] [-r|--record-prefix <prefix>] [-p|--socks-proxy <addr>]
+                 [-L|--max-expanded-leaves <max>] [-u|--user <username>] [-e|--epics] [-E|--epics-only]
+                 [-C|--disable-comm] [-Y|--just-load-yaml] [-s|--enable-streams] [-H|--disable-string-heuristics]
 
-    -S|--shelfmanager <shelfmanager_name> : ATCA shelfmanager node name or IP address. Must be used with -N.
-    -N|--slot         <slot_number>       : ATCA crate slot number. Must be used with -S.
-    -a|--addr         <FPGA_IP>           : FPGA IP address. If defined, -S and -N are ignored.
-    -c|--cpu          <cpu_name>          : The remote CPU node name.
-    -y|--yaml         <YAML_file>         : Path to the top level YAML file.If defined, -t will be ignored.
-    -t|--tar          <tarball_file>      : Path to the YAML tarball file. Must be defined is -y is not defined.
-    -h|--help                             : Show this message.
+    -S|--shelfmanager         <shelfmanager_name> : ATCA shelfmanager node name or IP address. Must be used with -N.
+    -N|--slot                 <slot_number>       : ATCA crate slot number. Must be used with -S.
+    -a|--addr                 <FPGA_IP>           : FPGA IP address. If defined, -S and -N are ignored.
+    -c|--cpu                  <cpu_name>          : The remote CPU node name.
+    -y|--yaml                 <YAML_file>         : Path to the top level YAML file. If defined, -t will be ignored.
+    -t|--tar                  <tarball_file>      : Path to the YAML tarball file. Must be defined if -y is not defined.
+    -r|--record-prefix        <prefix>            : EPICS Record name prefix; must match IOC prefix.
+    -p|--socks-proxy          <addr>              : Connect to any EPICS IOC via a SOCKS proxy on the machine at <addr>.
+    -L|--max-expanded-leaves  <max>               : If leaves in the tree are arrays, show elements only if no more than <max>.
+    -u|--user                 <username>          : User account.
+    -m|--map-port             <f>:<t>             : Patch UDP/TCP port '<f>' to port '<t>' in YAML.
+    -h|--help                                     : Show this message.
+    -e|--epics                                    : Use EPICS CA to connect.
+    -E|--epics-only                               : Disable CPSW entirely but use a simplified YAML file.
+    -C|--disable-comm                             : Disable CPSW communication. This option can be used to test.
+    -Y|--just-load-yaml                           : just load the YAML file and exit; used to test the yaml fixup.
+    -s|--enable-streams                           : Enable all streams.
+    -H|--disable-string-heuristics                : Disable some tests which guess if a value is a string.
+    -I|--with-ioc                                 : Run cpswTreeGUI in parallel with an IOC.
+
+If -a is not defined, then both -S and -N must be defined. The FPGA IP address will be automatically calculated from the crate ID and slot number.
+If -a is defined, -S and -N are ignored.
+
+All streams are disabled by default. They can be enabled by using the '-s|--enable-streams' option.
+
+The YAML file must be specified either pointing to a top level file (usually called 000TopLevel.yaml) using -y|--yaml, or a tarball file containing
+all the YAML files, using -t|--tar. If -y is used, -t is ignored.
+
+The script will start the rssi_bridge on the remote CPU inside a screen or tmux session called 'rssi_bridge_<FPGA_IP>'. Then it will start the cpswTreeGUI here.
+
+When the GUI is closed, the remote screen or tmux session will be automatically killed.
+
+The script will check if an rssi_bridge is already running on the remote CPU connected to the specified FGPA_IP. Also, it will check if the CPU and the FPGA are online.
+
+Currently, the remote CPU supported can be linuxRT (i.e. CPUs running 'buildroot-2016.11.1-x86_64' or 'buildroot-2019.08-x86_64'), Ubuntu or a RedHat distribution.
 ```
 
 If -a if not defined, then -S and -N must both be defined, and the
@@ -161,6 +191,3 @@ the cpswTreeGUI here When the GUI is closed, the remote screen
 session will be automatically killed. The script will check if an
 rssi_bridge is already running in the remote CPU connected to the
 specified FGPA_IP. Also, it will check if the CPU and FPGA are online.
-
-Currently, the remote CPU supported are only linuxRT CPUs running
-buildroot-2016.11.1-x86_64, and using the user 'laci'.

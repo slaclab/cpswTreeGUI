@@ -12,7 +12,7 @@ env_setup=${top_dir}/env.slac.sh
 
 # CPSW framework version. Extract it from the environment setup script so
 # we don't have to write it twice.
-cpsw_framework_version=$(grep cpsw/framework ${env_setup} | head -n 1 | sed -r 's|.+/framework/([^/]+)/.*|\1|')
+cpsw_framework_version=$(grep CPSW_VERSION= ${env_setup} | sed 's/CPSW_VERSION=//')
 
 # Remote CPU user
 cpu_user=laci
@@ -322,8 +322,14 @@ else
             printf "Running on Red Hat ${OS_REL}.\n"
             cpu_arch=rhel7-x86_64
         elif [[ $OS_DESC = *'Ubuntu'* ]]; then
+            # Transforms Release:	22.04 into 22.04
+            OS_REL=${OS_REL#*:}
+            # Remove spaces from string
+            OS_REL=$(echo $OS_REL | tr -d ' ')
             printf "Running on Ubuntu ${OS_REL}.\n"
-            cpu_arch=ubuntu20046-x86_64
+            # Transforms 22.04 into 2204
+            OS_REL=${OS_REL/./}
+            cpu_arch=ubuntu$OS_REL-x86_64
         fi
     fi
 fi
