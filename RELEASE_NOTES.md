@@ -3,6 +3,10 @@
 Release notes for the CPSW Tree GUI
 
 ## Releases:
+* __R1.3.1__: 2025-11-18 M. Donadio
+  * env.slac.sh and start.sh had hardcoded paths for afs and hardcoded ubuntu
+    version. I made them more flexible.
+
 * __R1.3.0__: 2025-03-11 M. Skoufis 
   * Updates to run on non-linuxRT hosts, run in parallel with IOCs and with tmux (when screen
     is not available).  Also verified support for arrays and the capability to run locally.
