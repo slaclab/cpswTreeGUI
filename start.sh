@@ -42,9 +42,9 @@ clean_up()
     if [ ${rssibridge_session_started+x} ]; then
         echo "Killing rssi bridge session on remote CPU..."
 	      if [[ ${rssibridge_session_binary} == screen ]];then
-            ssh ${cpu_user}@${cpu} screen -X -S ${rssibridge_session_name}  quit
+            ssh -x ${cpu_user}@${cpu} screen -X -S ${rssibridge_session_name}  quit
 	      elif [[ ${rssibridge_session_binary} == tmux ]];then
-            ssh ${cpu_user}@${cpu} tmux kill-session -t ${rssibridge_session_name}
+            ssh -x ${cpu_user}@${cpu} tmux kill-session -t ${rssibridge_session_name}
         else
 	          printf "Unknown session binary... ${rssibridge_session_binary}"
 	      fi
@@ -294,7 +294,7 @@ printf "CPU is online.\n"
 
 # Check kernel version on CPU
 printf "Looking for CPU kernel type...                    "
-kernel_version=$(ssh ${cpu_user}@${cpu} /bin/uname -r)
+kernel_version=$(ssh -x ${cpu_user}@${cpu} /bin/uname -r)
 
 # Check if the target CPU is running a linuxRT kernel
 rt=$(echo ${kernel_version} | grep rt)
@@ -316,8 +316,8 @@ else
         printf "buildroot-2019.08\n"
         cpu_arch=buildroot-2019.08-x86_64
     else
-        OS_DESC=$(ssh ${cpu_user}@${cpu} lsb_release -d)
-        OS_REL=$(ssh ${cpu_user}@${cpu} lsb_release -r)
+        OS_DESC=$(ssh -x ${cpu_user}@${cpu} lsb_release -d)
+        OS_REL=$(ssh -x ${cpu_user}@${cpu} lsb_release -r)
         if [[ $OS_DESC = *'Red Hat'* ]]; then
             printf "Running on Red Hat ${OS_REL}.\n"
             cpu_arch=rhel7-x86_64
@@ -429,7 +429,7 @@ fi
 
 # Check connection between CPU and FPGA
 printf "Checking connection between CPU and FPGA...       "
-if ! ssh ${cpu_user}@${cpu} ping -c 2 ${fpga_ip} &> /dev/null ; then
+if ! ssh -x ${cpu_user}@${cpu} ping -c 2 ${fpga_ip} &> /dev/null ; then
     printf "FPGA can not be reached from the remote CPU.\n"
     clean_up 1
 fi
@@ -437,8 +437,8 @@ printf "Connection OK.\n"
 
 # Check which terminal multiplexer we should be using
 printf "Identify terminal multiplexer to use...     "
-if [ $(ssh ${cpu_user}@${cpu} which screen | wc -l) == 0 ]; then
-  if [ $(ssh ${cpu_user}@${cpu} which tmux | wc -l) == 0 ]; then
+if [ $(ssh -x ${cpu_user}@${cpu} which screen | wc -l) == 0 ]; then
+  if [ $(ssh -x ${cpu_user}@${cpu} which tmux | wc -l) == 0 ]; then
     printf "Could not find neither screen nor tmux on the remote host...\n"
     printf "Exiting...\n"
     exit 0
@@ -457,14 +457,14 @@ rssibridge_session_name=${rssibridge_session_name//[.]/_}
 
 printf "Verifying if rssi_bridge is already running...    "
 if [[ ${rssibridge_session_binary} == screen ]];then
-  if [ $(ssh ${cpu_user}@${cpu} screen -ls | grep ${rssibridge_session_name} | wc -l) != 0 ]; then
+  if [ $(ssh -x ${cpu_user}@${cpu} screen -ls | grep ${rssibridge_session_name} | wc -l) != 0 ]; then
     printf "Yes, it is already running. Aborting...\n"
     clean_up 1
   else
     printf "No rssi_bridge was found.\n"
   fi
 elif [[ ${rssibridge_session_binary} == tmux ]];then
-  if [ $(ssh ${cpu_user}@${cpu} tmux ls | grep ${rssibridge_session_name} | wc -l) != 0 ]; then
+  if [ $(ssh -x ${cpu_user}@${cpu} tmux ls | grep ${rssibridge_session_name} | wc -l) != 0 ]; then
     printf "Yes, it is already running. Aborting...\n"
     clean_up 1
   else
@@ -475,24 +475,24 @@ fi
 # Start the rssi_bridge on the remote CPU
 printf "Starting an rssi_bridge...                        "
 if [[ ${rssibridge_session_binary} == screen ]];then
-  ssh ${cpu_user}@${cpu} screen -dmS ${rssibridge_session_name} -h 8192 ${rssi_bridge_bin} -a ${fpga_ip} -u 8192 -p 8193 -p 8194 -u 8197 -p 8198 -v -d
+  ssh -x ${cpu_user}@${cpu} screen -dmS ${rssibridge_session_name} -h 8192 ${rssi_bridge_bin} -a ${fpga_ip} -u 8192 -p 8193 -p 8194 -u 8197 -p 8198 -v -d
   rssibridge_session_started=yes
 elif [[ ${rssibridge_session_binary} == tmux ]];then
   printf "\n\nIN THE FOLLOWING TMUX SCREEN, DETACH MANUALLY WITH CTRL+B THEN D TO BRING UP cpswTreeGUI\n";sleep 8
-  ssh -t ${cpu_user}@${cpu} tmux new -d -s ${rssibridge_session_name} ${rssi_bridge_bin} -a ${fpga_ip} -p 8192 -p 8193 -p 8194 -u 8197 -p 8198 -v -d 
+  ssh -x -t ${cpu_user}@${cpu} tmux new -d -s ${rssibridge_session_name} ${rssi_bridge_bin} -a ${fpga_ip} -p 8192 -p 8193 -p 8194 -u 8197 -p 8198 -v -d 
   rssibridge_session_started=yes
 fi
 
 # Verifying if a screen or tmux session is running
 if [[ ${rssibridge_session_binary} == screen ]];then
-    if [ $(ssh ${cpu_user}@${cpu} screen -ls | grep ${rssibridge_session_name} | wc -l) == 0 ]; then
+    if [ $(ssh -x ${cpu_user}@${cpu} screen -ls | grep ${rssibridge_session_name} | wc -l) == 0 ]; then
         printf "Failed to start the rssi_bridge.\n"
         clean_up 1
     else
         printf "Done! It is now running in the screen session '${rssibridge_session_name}' on '${cpu}'.\n"
     fi
 elif [[ ${rssibridge_session_binary} == tmux ]];then
-    if [ $(ssh ${cpu_user}@${cpu} tmux ls | grep ${rssibridge_session_name} | wc -l) == 0 ]; then
+    if [ $(ssh -x ${cpu_user}@${cpu} tmux ls | grep ${rssibridge_session_name} | wc -l) == 0 ]; then
         printf "Failed to start the rssi_bridge.\n"
         clean_up 1
     else
